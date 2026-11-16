@@ -45,3 +45,31 @@ export function pickLine(rand: () => number = Math.random): string {
   const list = rand() < 0.22 ? CURSES : IDLE_LINES;
   return list[Math.floor(rand() * list.length)]!;
 }
+
+/** The King's lines while he strolls. */
+export const KING_LINES = [
+  "Hmpf.",
+  "Meu reino, minhas regras.",
+  "Quem manda aqui sou eu.",
+  "Cadê meu relatório?",
+  "Que ilha linda eu tenho.",
+  "Silêncio na corte!",
+  "Tô de olho.",
+];
+
+/** What he shouts when the whip cracks. */
+export const KING_CURSES = [
+  "Trabalha, vagabundo!",
+  "Anda, seu inútil!",
+  "Mais rápido, lesma!",
+  "Tá dormindo, desgraçado?",
+  "Bando de preguiçosos!",
+  "Volta pro trabalho, peste!",
+  "Mexe esse esqueleto!",
+  "Sem moleza, traste!",
+];
+
+/** What a soul answers to the whip. */
+export const OUCH_LINES = ["Ai!", "Ui!", "Já vou, já vou!", "Calma, majestade!", "Isso dói!", "Tô indo!", "Ô loco!", "Ai, minhas costas!"];
+
+export const pick = (list: readonly string[], rand: () => number = Math.random): string => list[Math.floor(rand() * list.length)]!;

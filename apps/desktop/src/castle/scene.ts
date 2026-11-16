@@ -2,7 +2,7 @@
 // shader/uniform paths.
 import "pixi.js/unsafe-eval";
 import { Application, Container, Graphics, Rectangle, Sprite, Text, Texture, type FederatedPointerEvent, type TextureSource } from "pixi.js";
-import { pickLine } from "./chatter";
+import { KING_CURSES, KING_LINES, OUCH_LINES, pick, pickLine } from "./chatter";
 import type { Agent, Encounter, Room } from "@ids/shared";
 import {
   AREAS,
@@ -83,6 +83,8 @@ interface Actor {
   leavingSince: number | null;
   lastAnim: string;
   lastState: string;
+  /** Just got whipped by the King: flinch until this time. */
+  hurtUntil: number;
   /** No real work: naps, then strolls around the island, then naps again. */
   idle: boolean;
   /** When the current nap or pause ends. */
@@ -95,6 +97,40 @@ interface Actor {
   bubbleUntil: number;
   nextSay: number;
 }
+
+interface KingSheet {
+  image: string;
+  frameWidth: number;
+  frameHeight: number;
+  anchorX: number;
+  anchorY: number;
+  animations: Record<string, { row: number; frames: number }>;
+}
+
+interface King {
+  sprite: Sprite;
+  frames: Record<string, Texture[]>;
+  label: Text;
+  pos: { x: number; y: number };
+  path: Point[];
+  mode: "sitting" | "strolling" | "chasing" | "whipping" | "pausing" | "returning";
+  until: number;
+  /** Strolls left before going back to the throne. */
+  legs: number;
+  target: string | null;
+  anim: string;
+  animT: number;
+  facing: 1 | -1;
+  bubble: Container | null;
+  bubbleUntil: number;
+  nextSay: number;
+  whipped: boolean;
+}
+
+/** The throne tile and the tile in front of it where he steps down. */
+const KING_THRONE: Point = { x: 23, y: 4 };
+const KING_STEP: Point = { x: 23, y: 5 };
+const KING_SCALE = 1.25;
 
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
 
@@ -233,6 +269,182 @@ export class CastleScene {
     this.tiles = { source, cw: ts.cellWidth ?? 32, ch: ts.cellHeight ?? 80, ax: ts.anchorX ?? 16, ay: ts.anchorY ?? 68, columns: ts.columns ?? 16, tiles: ts.tiles ?? {}, cache: new Map() };
     this.buildGround();
     this.buildRooms(0);
+    const ks = env["king"] as unknown as KingSheet | undefined;
+    if (ks) {
+      const kimg = await loadImage(ks.image);
+      if (this.destroyed) return;
+      this.spawnKing(ks, Texture.from(kimg).source);
+    }
+  }
+
+  // --- The King: an NPC of the castle, not a Claude Code agent. ---------------
+  private king: King | null = null;
+
+  private spawnKing(sheet: KingSheet, source: TextureSource) {
+    source.scaleMode = "nearest";
+    const frames: Record<string, Texture[]> = {};
+    for (const [name, a] of Object.entries(sheet.animations)) {
+      frames[name] = Array.from({ length: a.frames }, (_, i) => new Texture({ source, frame: new Rectangle(i * sheet.frameWidth, a.row * sheet.frameHeight, sheet.frameWidth, sheet.frameHeight) }));
+    }
+    const sprite = new Sprite(frames.sit?.[0] ?? Texture.EMPTY);
+    sprite.anchor.set(sheet.anchorX / sheet.frameWidth, sheet.anchorY / sheet.frameHeight);
+    this.sortLayer.addChild(sprite);
+    const label = this.makeLabel();
+    label.text = "O Rei";
+    label.style.fill = 0xd7b45a;
+    this.king = { sprite, frames, label, pos: feetOf(KING_THRONE), path: [], mode: "sitting", until: Date.now() + rnd(8000, 20000), legs: 0, target: null, anim: "sit", animT: 0, facing: 1, bubble: null, bubbleUntil: 0, nextSay: 0, whipped: false };
+  }
+
+  private kingTick(dt: number, now: number) {
+    const k = this.king;
+    if (!k) return;
+    const awake = () => [...this.actors.values()].filter((a) => a.phase !== "sleeping" && a.leavingSince === null && !resolveCharacter(a.agent, this.custom).hidden);
+    const walkTo = (to: Point, mode: King["mode"]) => {
+      const from = k.mode === "sitting" ? KING_STEP : tileOf(k.pos);
+      const path = findPath(this.map, from, to);
+      if (!path) return false;
+      if (k.mode === "sitting") k.pos = feetOf(KING_STEP);
+      k.path = path.slice(1);
+      k.mode = mode;
+      return true;
+    };
+    const nextLeg = () => {
+      if (k.legs <= 0) {
+        walkTo(KING_STEP, "returning");
+        return;
+      }
+      k.legs--;
+      // Two times out of three he goes after a soul that is up and about.
+      const souls = awake();
+      const victim = souls.length && Math.random() < 0.67 ? souls[Math.floor(Math.random() * souls.length)]! : null;
+      if (victim) {
+        const t = tileOf(victim.pos);
+        const side = [[-1, 0], [1, 0], [0, 1], [0, -1]].map(([dx, dy]) => ({ x: t.x + dx!, y: t.y + dy! })).find((p) => !this.map.blocked[p.y * MAP_W + p.x] && findPath(this.map, tileOf(k.pos), p));
+        if (side && walkTo(side, "chasing")) {
+          k.target = victim.id;
+          return;
+        }
+      }
+      k.target = null;
+      if (!walkTo(this.randomSpot(), "strolling")) walkTo(KING_STEP, "returning");
+    };
+
+    if (k.mode === "sitting") {
+      if (now > k.until) {
+        k.legs = 2 + Math.floor(Math.random() * 3);
+        nextLeg();
+      }
+    } else if (k.mode === "whipping") {
+      const victim = k.target ? this.actors.get(k.target) : undefined;
+      // The crack lands on the second frame.
+      if (!k.whipped && k.animT > 180) {
+        k.whipped = true;
+        this.kingSay(pick(KING_CURSES), now);
+        if (victim) {
+          victim.hurtUntil = now + 900;
+          this.say(victim, pick(OUCH_LINES), now);
+          victim.nextSay = now + rnd(6000, 12000);
+          const sp = toIso(victim.pos);
+          void spawnEffect(this.fxLayer, "sparkle", sp.x, sp.y - 20, 1);
+        }
+      }
+      if (now > k.until) {
+        k.mode = "pausing";
+        k.until = now + rnd(1200, 3000);
+      }
+    } else if (k.mode === "pausing") {
+      if (now > k.until) nextLeg();
+    } else {
+      const s = stepAlong(k.pos, k.path, dt, WALK_SPEED * 0.8);
+      k.pos = { x: s.x, y: s.y };
+      k.path = s.path;
+      if (s.dx !== 0) k.facing = s.dx > 0 ? 1 : -1;
+      if (k.nextSay === 0) k.nextSay = now + rnd(3000, 9000);
+      if (now > k.nextSay && k.mode === "strolling") {
+        this.kingSay(pick(KING_LINES), now);
+        k.nextSay = now + rnd(9000, 20000);
+      }
+      // Close enough to the soul he is after: no need to walk the whole way.
+      if (k.mode === "chasing" && k.target) {
+        const v = this.actors.get(k.target);
+        if (v && v.phase !== "sleeping" && Math.hypot(v.pos.x - k.pos.x, v.pos.y - k.pos.y) < TILE_PX * 1.6) k.path = [];
+      }
+      if (k.path.length === 0) {
+        if (k.mode === "returning") {
+          k.mode = "sitting";
+          k.pos = feetOf(KING_THRONE);
+          k.until = now + rnd(25000, 60000);
+          k.facing = 1;
+        } else if (k.mode === "chasing") {
+          const victim = k.target ? this.actors.get(k.target) : undefined;
+          const near = victim && victim.phase !== "sleeping" && Math.hypot(victim.pos.x - k.pos.x, victim.pos.y - k.pos.y) < TILE_PX * 2.5;
+          if (victim && near) {
+            k.facing = toIso(victim.pos).x >= toIso(k.pos).x ? 1 : -1;
+            k.mode = "whipping";
+            k.whipped = false;
+            k.animT = 0;
+            k.until = now + 520;
+          } else {
+            // The soul got away.
+            k.mode = "pausing";
+            k.until = now + rnd(800, 2000);
+          }
+        } else {
+          k.mode = "pausing";
+          k.until = now + rnd(2000, 5000);
+        }
+      }
+    }
+
+    // Animation and placement.
+    const anim = k.mode === "sitting" ? "sit" : k.mode === "whipping" ? "whip" : k.mode === "pausing" ? "idle" : "walk";
+    if (anim !== k.anim) {
+      k.anim = anim;
+      k.animT = 0;
+    }
+    k.animT += dt;
+    const list = k.frames[anim] ?? [];
+    const fps = anim === "walk" ? 10 : anim === "whip" ? 8 : anim === "sit" ? 2 : 4;
+    const i = Math.floor((k.animT / 1000) * fps);
+    const tex = list[anim === "whip" ? Math.min(i, list.length - 1) : i % Math.max(1, list.length)];
+    if (tex) k.sprite.texture = tex;
+    const sp = toIso(k.pos);
+    const seat = k.mode === "sitting" ? 12 : 0;
+    k.sprite.scale.set(KING_SCALE * (k.mode === "sitting" ? 1 : k.facing), KING_SCALE);
+    k.sprite.position.set(Math.round(sp.x), Math.round(sp.y - seat));
+    k.sprite.zIndex = sp.y + (k.mode === "sitting" ? 1 : 0.5);
+    k.label.scale.set(1 / this.zoom);
+    k.label.position.set(sp.x, sp.y - seat - 30 * KING_SCALE);
+    if (k.bubble) {
+      if (now > k.bubbleUntil) {
+        k.bubble.destroy({ children: true });
+        k.bubble = null;
+      } else {
+        k.bubble.scale.set(1 / this.zoom);
+        k.bubble.position.set(sp.x, sp.y - seat - 30 * KING_SCALE - 20 / this.zoom);
+      }
+    }
+  }
+
+  private kingSay(text: string, now: number) {
+    const k = this.king;
+    if (!k) return;
+    k.bubble?.destroy({ children: true });
+    k.bubble = this.makeBubble(text, 0xd7b45a);
+    k.bubbleUntil = now + 3200;
+  }
+
+  private makeBubble(text: string, border = 0x2a4a46): Container {
+    const t = new Text({ text, style: { fontFamily: "Inter, Segoe UI, Noto Sans, sans-serif", fontSize: 12, fill: 0xe9fff6 }, resolution: 2 });
+    const w = Math.ceil(t.width) + 14;
+    const h = Math.ceil(t.height) + 8;
+    const g = new Graphics().rect(-w / 2, -h, w, h).fill({ color: 0x0b1416, alpha: 0.92 }).stroke({ width: 2, color: border });
+    g.poly([-4, 0, 4, 0, 0, 5]).fill({ color: 0x0b1416, alpha: 0.92 });
+    t.position.set(-w / 2 + 7, -h + 4);
+    const c = new Container();
+    c.addChild(g, t);
+    this.fxLayer.addChild(c);
+    return c;
   }
 
   private endDrag() {
@@ -565,6 +777,7 @@ export class CastleScene {
       leavingSince: null,
       lastAnim: "",
       lastState: "",
+      hurtUntil: 0,
       idle: false,
       idleUntil: Date.now() + rnd(3000, 12000),
       strollLeft: 0,
@@ -603,6 +816,7 @@ export class CastleScene {
   }
 
   private animFor(actor: Actor, now: number): string {
+    if (now < actor.hurtUntil) return "hurt";
     if (actor.phase === "walking") return "move";
     if (actor.phase === "sleeping") return "idle";
     return visualFor(actor.agent, now).animation;
@@ -699,6 +913,7 @@ export class CastleScene {
       if (actor.leavingSince !== null && actor.phase === "sleeping" && now - actor.leavingSince > LEAVE_AFTER_MS) this.remove(actor);
       else if (actor.leavingSince !== null && !actor.bed && now - actor.leavingSince > LEAVE_AFTER_MS) this.remove(actor);
     }
+    this.kingTick(dt, now);
     for (const m of this.monsters.values()) {
       const a = this.actors.get(m.encounter.agentId);
       if (a) {
@@ -759,16 +974,7 @@ export class CastleScene {
   private say(actor: Actor, text: string | null | undefined, now: number) {
     if (text) {
       actor.bubble?.destroy({ children: true });
-      const t = new Text({ text, style: { fontFamily: "Inter, Segoe UI, Noto Sans, sans-serif", fontSize: 12, fill: 0xe9fff6 }, resolution: 2 });
-      const w = Math.ceil(t.width) + 14;
-      const h = Math.ceil(t.height) + 8;
-      const g = new Graphics().rect(-w / 2, -h, w, h).fill({ color: 0x0b1416, alpha: 0.92 }).stroke({ width: 2, color: 0x2a4a46 });
-      g.poly([-4, 0, 4, 0, 0, 5]).fill({ color: 0x0b1416, alpha: 0.92 });
-      t.position.set(-w / 2 + 7, -h + 4);
-      const c = new Container();
-      c.addChild(g, t);
-      this.fxLayer.addChild(c);
-      actor.bubble = c;
+      actor.bubble = this.makeBubble(text);
       actor.bubbleUntil = now + 3200;
     }
     if (!actor.bubble) return;

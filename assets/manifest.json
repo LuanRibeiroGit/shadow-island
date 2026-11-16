@@ -978,6 +978,33 @@
         "grave": 68,
         "broken_pillar": 69
       }
+    },
+    "king": {
+      "image": "characters/king.png",
+      "width": 192,
+      "height": 128,
+      "frameWidth": 32,
+      "frameHeight": 32,
+      "anchorX": 16,
+      "anchorY": 30,
+      "animations": {
+        "idle": {
+          "row": 0,
+          "frames": 4
+        },
+        "walk": {
+          "row": 1,
+          "frames": 6
+        },
+        "sit": {
+          "row": 2,
+          "frames": 4
+        },
+        "whip": {
+          "row": 3,
+          "frames": 4
+        }
+      }
     }
   },
   "ui": {
