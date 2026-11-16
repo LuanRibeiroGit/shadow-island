@@ -1,0 +1,843 @@
+{
+  "version": 1,
+  "characters": {
+    "lantern_keeper": {
+      "image": "characters/lantern_keeper.png",
+      "frameWidth": 24,
+      "frameHeight": 24,
+      "anchorY": 22,
+      "animations": {
+        "idle": {
+          "row": 0,
+          "frames": 4,
+          "fps": 4,
+          "loop": true
+        },
+        "move": {
+          "row": 1,
+          "frames": 6,
+          "fps": 10,
+          "loop": true
+        },
+        "work": {
+          "row": 2,
+          "frames": 4,
+          "fps": 8,
+          "loop": true
+        },
+        "read": {
+          "row": 3,
+          "frames": 4,
+          "fps": 4,
+          "loop": true
+        },
+        "cast": {
+          "row": 4,
+          "frames": 4,
+          "fps": 7,
+          "loop": true
+        },
+        "attack": {
+          "row": 5,
+          "frames": 4,
+          "fps": 9,
+          "loop": true
+        },
+        "wait": {
+          "row": 6,
+          "frames": 4,
+          "fps": 3,
+          "loop": true
+        },
+        "cheer": {
+          "row": 7,
+          "frames": 4,
+          "fps": 8,
+          "loop": true
+        },
+        "hurt": {
+          "row": 8,
+          "frames": 3,
+          "fps": 8,
+          "loop": false
+        }
+      },
+      "palette": {
+        "cloak": "#2c4a52",
+        "trim": "#d7b45a",
+        "glow": "#7cf2c2"
+      }
+    },
+    "wraith_scholar": {
+      "image": "characters/wraith_scholar.png",
+      "frameWidth": 24,
+      "frameHeight": 24,
+      "anchorY": 22,
+      "animations": {
+        "idle": {
+          "row": 0,
+          "frames": 4,
+          "fps": 4,
+          "loop": true
+        },
+        "move": {
+          "row": 1,
+          "frames": 6,
+          "fps": 10,
+          "loop": true
+        },
+        "work": {
+          "row": 2,
+          "frames": 4,
+          "fps": 8,
+          "loop": true
+        },
+        "read": {
+          "row": 3,
+          "frames": 4,
+          "fps": 4,
+          "loop": true
+        },
+        "cast": {
+          "row": 4,
+          "frames": 4,
+          "fps": 7,
+          "loop": true
+        },
+        "attack": {
+          "row": 5,
+          "frames": 4,
+          "fps": 9,
+          "loop": true
+        },
+        "wait": {
+          "row": 6,
+          "frames": 4,
+          "fps": 3,
+          "loop": true
+        },
+        "cheer": {
+          "row": 7,
+          "frames": 4,
+          "fps": 8,
+          "loop": true
+        },
+        "hurt": {
+          "row": 8,
+          "frames": 3,
+          "fps": 8,
+          "loop": false
+        }
+      },
+      "palette": {
+        "cloak": "#3a3f6b",
+        "trim": "#a9b4ff",
+        "glow": "#9fe7ff"
+      }
+    },
+    "spectral_smith": {
+      "image": "characters/spectral_smith.png",
+      "frameWidth": 24,
+      "frameHeight": 24,
+      "anchorY": 22,
+      "animations": {
+        "idle": {
+          "row": 0,
+          "frames": 4,
+          "fps": 4,
+          "loop": true
+        },
+        "move": {
+          "row": 1,
+          "frames": 6,
+          "fps": 10,
+          "loop": true
+        },
+        "work": {
+          "row": 2,
+          "frames": 4,
+          "fps": 8,
+          "loop": true
+        },
+        "read": {
+          "row": 3,
+          "frames": 4,
+          "fps": 4,
+          "loop": true
+        },
+        "cast": {
+          "row": 4,
+          "frames": 4,
+          "fps": 7,
+          "loop": true
+        },
+        "attack": {
+          "row": 5,
+          "frames": 4,
+          "fps": 9,
+          "loop": true
+        },
+        "wait": {
+          "row": 6,
+          "frames": 4,
+          "fps": 3,
+          "loop": true
+        },
+        "cheer": {
+          "row": 7,
+          "frames": 4,
+          "fps": 8,
+          "loop": true
+        },
+        "hurt": {
+          "row": 8,
+          "frames": 3,
+          "fps": 8,
+          "loop": false
+        }
+      },
+      "palette": {
+        "cloak": "#5a3b2e",
+        "trim": "#f0a35c",
+        "glow": "#ffd28a"
+      }
+    },
+    "mist_alchemist": {
+      "image": "characters/mist_alchemist.png",
+      "frameWidth": 24,
+      "frameHeight": 24,
+      "anchorY": 22,
+      "animations": {
+        "idle": {
+          "row": 0,
+          "frames": 4,
+          "fps": 4,
+          "loop": true
+        },
+        "move": {
+          "row": 1,
+          "frames": 6,
+          "fps": 10,
+          "loop": true
+        },
+        "work": {
+          "row": 2,
+          "frames": 4,
+          "fps": 8,
+          "loop": true
+        },
+        "read": {
+          "row": 3,
+          "frames": 4,
+          "fps": 4,
+          "loop": true
+        },
+        "cast": {
+          "row": 4,
+          "frames": 4,
+          "fps": 7,
+          "loop": true
+        },
+        "attack": {
+          "row": 5,
+          "frames": 4,
+          "fps": 9,
+          "loop": true
+        },
+        "wait": {
+          "row": 6,
+          "frames": 4,
+          "fps": 3,
+          "loop": true
+        },
+        "cheer": {
+          "row": 7,
+          "frames": 4,
+          "fps": 8,
+          "loop": true
+        },
+        "hurt": {
+          "row": 8,
+          "frames": 3,
+          "fps": 8,
+          "loop": false
+        }
+      },
+      "palette": {
+        "cloak": "#2f5a3a",
+        "trim": "#9be37a",
+        "glow": "#c8ff8f"
+      }
+    },
+    "bone_sentinel": {
+      "image": "characters/bone_sentinel.png",
+      "frameWidth": 24,
+      "frameHeight": 24,
+      "anchorY": 22,
+      "animations": {
+        "idle": {
+          "row": 0,
+          "frames": 4,
+          "fps": 4,
+          "loop": true
+        },
+        "move": {
+          "row": 1,
+          "frames": 6,
+          "fps": 10,
+          "loop": true
+        },
+        "work": {
+          "row": 2,
+          "frames": 4,
+          "fps": 8,
+          "loop": true
+        },
+        "read": {
+          "row": 3,
+          "frames": 4,
+          "fps": 4,
+          "loop": true
+        },
+        "cast": {
+          "row": 4,
+          "frames": 4,
+          "fps": 7,
+          "loop": true
+        },
+        "attack": {
+          "row": 5,
+          "frames": 4,
+          "fps": 9,
+          "loop": true
+        },
+        "wait": {
+          "row": 6,
+          "frames": 4,
+          "fps": 3,
+          "loop": true
+        },
+        "cheer": {
+          "row": 7,
+          "frames": 4,
+          "fps": 8,
+          "loop": true
+        },
+        "hurt": {
+          "row": 8,
+          "frames": 3,
+          "fps": 8,
+          "loop": false
+        }
+      },
+      "palette": {
+        "cloak": "#4b4b55",
+        "trim": "#e9e3d1",
+        "glow": "#f5f0dc"
+      }
+    },
+    "hollow_hunter": {
+      "image": "characters/hollow_hunter.png",
+      "frameWidth": 24,
+      "frameHeight": 24,
+      "anchorY": 22,
+      "animations": {
+        "idle": {
+          "row": 0,
+          "frames": 4,
+          "fps": 4,
+          "loop": true
+        },
+        "move": {
+          "row": 1,
+          "frames": 6,
+          "fps": 10,
+          "loop": true
+        },
+        "work": {
+          "row": 2,
+          "frames": 4,
+          "fps": 8,
+          "loop": true
+        },
+        "read": {
+          "row": 3,
+          "frames": 4,
+          "fps": 4,
+          "loop": true
+        },
+        "cast": {
+          "row": 4,
+          "frames": 4,
+          "fps": 7,
+          "loop": true
+        },
+        "attack": {
+          "row": 5,
+          "frames": 4,
+          "fps": 9,
+          "loop": true
+        },
+        "wait": {
+          "row": 6,
+          "frames": 4,
+          "fps": 3,
+          "loop": true
+        },
+        "cheer": {
+          "row": 7,
+          "frames": 4,
+          "fps": 8,
+          "loop": true
+        },
+        "hurt": {
+          "row": 8,
+          "frames": 3,
+          "fps": 8,
+          "loop": false
+        }
+      },
+      "palette": {
+        "cloak": "#5a2a3a",
+        "trim": "#ff7a8a",
+        "glow": "#ff9fb0"
+      }
+    },
+    "ink_scribe": {
+      "image": "characters/ink_scribe.png",
+      "frameWidth": 24,
+      "frameHeight": 24,
+      "anchorY": 22,
+      "animations": {
+        "idle": {
+          "row": 0,
+          "frames": 4,
+          "fps": 4,
+          "loop": true
+        },
+        "move": {
+          "row": 1,
+          "frames": 6,
+          "fps": 10,
+          "loop": true
+        },
+        "work": {
+          "row": 2,
+          "frames": 4,
+          "fps": 8,
+          "loop": true
+        },
+        "read": {
+          "row": 3,
+          "frames": 4,
+          "fps": 4,
+          "loop": true
+        },
+        "cast": {
+          "row": 4,
+          "frames": 4,
+          "fps": 7,
+          "loop": true
+        },
+        "attack": {
+          "row": 5,
+          "frames": 4,
+          "fps": 9,
+          "loop": true
+        },
+        "wait": {
+          "row": 6,
+          "frames": 4,
+          "fps": 3,
+          "loop": true
+        },
+        "cheer": {
+          "row": 7,
+          "frames": 4,
+          "fps": 8,
+          "loop": true
+        },
+        "hurt": {
+          "row": 8,
+          "frames": 3,
+          "fps": 8,
+          "loop": false
+        }
+      },
+      "palette": {
+        "cloak": "#33405a",
+        "trim": "#c9d6ff",
+        "glow": "#e2e9ff"
+      }
+    },
+    "tide_architect": {
+      "image": "characters/tide_architect.png",
+      "frameWidth": 24,
+      "frameHeight": 24,
+      "anchorY": 22,
+      "animations": {
+        "idle": {
+          "row": 0,
+          "frames": 4,
+          "fps": 4,
+          "loop": true
+        },
+        "move": {
+          "row": 1,
+          "frames": 6,
+          "fps": 10,
+          "loop": true
+        },
+        "work": {
+          "row": 2,
+          "frames": 4,
+          "fps": 8,
+          "loop": true
+        },
+        "read": {
+          "row": 3,
+          "frames": 4,
+          "fps": 4,
+          "loop": true
+        },
+        "cast": {
+          "row": 4,
+          "frames": 4,
+          "fps": 7,
+          "loop": true
+        },
+        "attack": {
+          "row": 5,
+          "frames": 4,
+          "fps": 9,
+          "loop": true
+        },
+        "wait": {
+          "row": 6,
+          "frames": 4,
+          "fps": 3,
+          "loop": true
+        },
+        "cheer": {
+          "row": 7,
+          "frames": 4,
+          "fps": 8,
+          "loop": true
+        },
+        "hurt": {
+          "row": 8,
+          "frames": 3,
+          "fps": 8,
+          "loop": false
+        }
+      },
+      "palette": {
+        "cloak": "#1f4f63",
+        "trim": "#7fd3e6",
+        "glow": "#b5f1ff"
+      }
+    },
+    "wisp": {
+      "image": "characters/wisp.png",
+      "frameWidth": 24,
+      "frameHeight": 24,
+      "anchorY": 22,
+      "animations": {
+        "idle": {
+          "row": 0,
+          "frames": 4,
+          "fps": 4,
+          "loop": true
+        },
+        "move": {
+          "row": 1,
+          "frames": 6,
+          "fps": 10,
+          "loop": true
+        },
+        "work": {
+          "row": 2,
+          "frames": 4,
+          "fps": 8,
+          "loop": true
+        },
+        "read": {
+          "row": 3,
+          "frames": 4,
+          "fps": 4,
+          "loop": true
+        },
+        "cast": {
+          "row": 4,
+          "frames": 4,
+          "fps": 7,
+          "loop": true
+        },
+        "attack": {
+          "row": 5,
+          "frames": 4,
+          "fps": 9,
+          "loop": true
+        },
+        "wait": {
+          "row": 6,
+          "frames": 4,
+          "fps": 3,
+          "loop": true
+        },
+        "cheer": {
+          "row": 7,
+          "frames": 4,
+          "fps": 8,
+          "loop": true
+        },
+        "hurt": {
+          "row": 8,
+          "frames": 3,
+          "fps": 8,
+          "loop": false
+        }
+      },
+      "palette": {
+        "cloak": "#2b3f45",
+        "trim": "#8fb9b1",
+        "glow": "#b8fff0"
+      }
+    }
+  },
+  "monsters": {
+    "bug_monster": {
+      "image": "monsters/bug_monster.png",
+      "frameWidth": 24,
+      "frameHeight": 24,
+      "anchorY": 22,
+      "animations": {
+        "idle": {
+          "row": 0,
+          "frames": 4,
+          "fps": 5,
+          "loop": true
+        },
+        "attack": {
+          "row": 1,
+          "frames": 4,
+          "fps": 8,
+          "loop": true
+        },
+        "vanish": {
+          "row": 2,
+          "frames": 4,
+          "fps": 6,
+          "loop": false
+        }
+      }
+    },
+    "error_goblin": {
+      "image": "monsters/error_goblin.png",
+      "frameWidth": 24,
+      "frameHeight": 24,
+      "anchorY": 22,
+      "animations": {
+        "idle": {
+          "row": 0,
+          "frames": 4,
+          "fps": 5,
+          "loop": true
+        },
+        "attack": {
+          "row": 1,
+          "frames": 4,
+          "fps": 8,
+          "loop": true
+        },
+        "vanish": {
+          "row": 2,
+          "frames": 4,
+          "fps": 6,
+          "loop": false
+        }
+      }
+    },
+    "dependency_dragon": {
+      "image": "monsters/dependency_dragon.png",
+      "frameWidth": 24,
+      "frameHeight": 24,
+      "anchorY": 22,
+      "animations": {
+        "idle": {
+          "row": 0,
+          "frames": 4,
+          "fps": 5,
+          "loop": true
+        },
+        "attack": {
+          "row": 1,
+          "frames": 4,
+          "fps": 8,
+          "loop": true
+        },
+        "vanish": {
+          "row": 2,
+          "frames": 4,
+          "fps": 6,
+          "loop": false
+        }
+      }
+    },
+    "test_phantom": {
+      "image": "monsters/test_phantom.png",
+      "frameWidth": 24,
+      "frameHeight": 24,
+      "anchorY": 22,
+      "animations": {
+        "idle": {
+          "row": 0,
+          "frames": 4,
+          "fps": 5,
+          "loop": true
+        },
+        "attack": {
+          "row": 1,
+          "frames": 4,
+          "fps": 8,
+          "loop": true
+        },
+        "vanish": {
+          "row": 2,
+          "frames": 4,
+          "fps": 6,
+          "loop": false
+        }
+      }
+    },
+    "conflict_skeleton": {
+      "image": "monsters/conflict_skeleton.png",
+      "frameWidth": 24,
+      "frameHeight": 24,
+      "anchorY": 22,
+      "animations": {
+        "idle": {
+          "row": 0,
+          "frames": 4,
+          "fps": 5,
+          "loop": true
+        },
+        "attack": {
+          "row": 1,
+          "frames": 4,
+          "fps": 8,
+          "loop": true
+        },
+        "vanish": {
+          "row": 2,
+          "frames": 4,
+          "fps": 6,
+          "loop": false
+        }
+      }
+    },
+    "security_beast": {
+      "image": "monsters/security_beast.png",
+      "frameWidth": 24,
+      "frameHeight": 24,
+      "anchorY": 22,
+      "animations": {
+        "idle": {
+          "row": 0,
+          "frames": 4,
+          "fps": 5,
+          "loop": true
+        },
+        "attack": {
+          "row": 1,
+          "frames": 4,
+          "fps": 8,
+          "loop": true
+        },
+        "vanish": {
+          "row": 2,
+          "frames": 4,
+          "fps": 6,
+          "loop": false
+        }
+      }
+    }
+  },
+  "effects": {
+    "sparkle": {
+      "image": "effects/effects.png",
+      "frameWidth": 16,
+      "frameHeight": 16,
+      "anchorY": 8,
+      "animations": {
+        "play": {
+          "row": 0,
+          "frames": 6,
+          "fps": 12,
+          "loop": false
+        }
+      }
+    },
+    "mist": {
+      "image": "effects/effects.png",
+      "frameWidth": 16,
+      "frameHeight": 16,
+      "anchorY": 12,
+      "animations": {
+        "play": {
+          "row": 1,
+          "frames": 6,
+          "fps": 10,
+          "loop": false
+        }
+      }
+    }
+  },
+  "environments": {
+    "castle-tiles": {
+      "image": "environments/castle-tiles.png",
+      "width": 128,
+      "height": 64,
+      "tileSize": 16,
+      "columns": 8,
+      "tiles": {
+        "wall": 0,
+        "wall_dark": 1,
+        "floor_stone": 2,
+        "floor_wood": 3,
+        "window": 4,
+        "banner": 5,
+        "torch0": 6,
+        "torch1": 7,
+        "bookshelf": 8,
+        "desk": 9,
+        "anvil": 10,
+        "forge0": 11,
+        "forge1": 12,
+        "cauldron0": 13,
+        "cauldron1": 14,
+        "throne": 15,
+        "telescope": 16,
+        "chest": 17,
+        "gold": 18,
+        "bunk": 19,
+        "candle": 20,
+        "rug": 21,
+        "barrel": 22,
+        "map_table": 23,
+        "crystal": 24,
+        "rack": 25,
+        "door": 26,
+        "pillar": 27
+      }
+    },
+    "island-backdrop": {
+      "image": "environments/island-backdrop.png",
+      "width": 480,
+      "height": 270
+    }
+  },
+  "ui": {
+    "appIcon": "ui/app-icon-32.png"
+  }
+}
