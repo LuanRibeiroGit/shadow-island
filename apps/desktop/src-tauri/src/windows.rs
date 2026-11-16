@@ -161,6 +161,7 @@ pub fn position_overlay(app: &AppHandle, w: &WebviewWindow) {
     };
     let content = if s.auto_width { state.overlay_content_width.lock().ok().and_then(|g| *g) } else { None };
     let r = overlay_rect_fit(m, Some(work), s.placement, s.height, s.width_fraction, content, s.align);
+    log::info!("overlay: monitor {:?} {m:?} work {work:?} align {:?} content {content:?} -> {r:?}", mon.name(), s.align);
     let _ = w.set_size(LogicalSize::new(r.width as f64, r.height as f64));
     let _ = w.set_position(LogicalPosition::new(r.x as f64, r.y as f64));
 
@@ -173,20 +174,25 @@ pub fn position_overlay(app: &AppHandle, w: &WebviewWindow) {
         std::thread::sleep(Duration::from_millis(250));
         let Ok(size) = w2.inner_size() else { return };
         let actual = (size.height as f64 / scale).round() as i32;
+        let mut y = r.y;
         if actual > r.height as i32 && matches!(placement, OverlayPlacement::Bottom | OverlayPlacement::Taskbar) {
-            let y = r.y + r.height as i32 - actual;
+            y = r.y + r.height as i32 - actual;
             log::info!("overlay: window is {actual}px tall (asked {}), moving to y={y}", r.height);
-            let _ = w2.set_position(LogicalPosition::new(r.x as f64, y as f64));
         }
+        // Always re-apply the position: window managers (GNOME/XWayland) may
+        // place a freshly shown or resized window on their own.
+        let _ = w2.set_position(LogicalPosition::new(r.x as f64, y as f64));
     });
 }
 
 pub fn set_overlay_visible(app: &AppHandle, visible: bool) {
     if visible {
         if let Ok(w) = ensure_overlay(app) {
-            position_overlay(app, &w);
             let _ = w.show();
             let _ = w.set_always_on_top(true);
+            // Position after showing: before it is mapped the window manager may
+            // ignore the requested position and use its own placement.
+            position_overlay(app, &w);
         }
     } else if let Some(w) = app.get_webview_window(OVERLAY) {
         let _ = w.hide();
