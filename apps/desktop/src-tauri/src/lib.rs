@@ -212,6 +212,7 @@ pub fn run() {
             commands::system::save_character,
             commands::system::system_info,
             commands::system::read_logs,
+            commands::system::log_client_error,
             commands::system::export_data,
             commands::system::backup_database,
             commands::system::toggle_castle,

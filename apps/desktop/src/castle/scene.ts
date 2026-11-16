@@ -1,3 +1,6 @@
+// Strict CSP (no unsafe-eval in the webview): Pixi must use its precompiled
+// shader/uniform paths.
+import "pixi.js/unsafe-eval";
 import { Application, Container, Graphics, Rectangle, Sprite, Texture, type TextureSource } from "pixi.js";
 import type { Agent, Encounter, Room } from "@ids/shared";
 import { visualFor, nextVisualChange, type CharacterCustomization } from "@ids/game-engine";
@@ -22,6 +25,8 @@ interface TileSet {
  * forge, cauldron) tick slowly; everything pauses while the window is hidden.
  */
 export class CastleScene {
+  private ready = false;
+  private destroyed = false;
   readonly app = new Application();
   private root = new Container();
   private roomLayer = new Container();
@@ -43,6 +48,11 @@ export class CastleScene {
 
   async init(el: HTMLElement): Promise<void> {
     await this.app.init({ width: CASTLE_W, height: CASTLE_H, background: "#050b0d", antialias: false, resolution: 1 });
+    this.ready = true;
+    if (this.destroyed) {
+      this.app.destroy(true, { children: true });
+      return;
+    }
     this.app.canvas.style.imageRendering = "pixelated";
     el.appendChild(this.app.canvas);
     this.root.addChild(this.roomLayer, this.highlight, this.actorLayer, this.fxLayer);
@@ -52,15 +62,18 @@ export class CastleScene {
     document.addEventListener("visibilitychange", this.onVisibility);
 
     const m = await loadManifest();
+    if (this.destroyed) return;
     const env = m.environments as unknown as Record<string, { image: string; tileSize?: number; columns?: number; tiles?: Record<string, number> }>;
     const ts = env["castle-tiles"]!;
     const img = await loadImage(ts.image);
+    if (this.destroyed) return;
     const source = Texture.from(img).source;
     source.scaleMode = "nearest";
     this.tiles = { source, size: ts.tileSize ?? 16, columns: ts.columns ?? 8, tiles: ts.tiles ?? {}, cache: new Map() };
     const back = env["island-backdrop"];
     if (back) {
       const bimg = await loadImage(back.image);
+      if (this.destroyed) return;
       const bt = Texture.from(bimg);
       bt.source.scaleMode = "nearest";
       this.backdrop = new Sprite(bt);
@@ -84,7 +97,7 @@ export class CastleScene {
 
   /** (Re)build room art for a restoration level. */
   buildRooms(level: number) {
-    if (level === this.level || !this.tiles) return;
+    if (level === this.level || !this.tiles || this.destroyed) return;
     this.level = level;
     // Keep the backdrop; rebuild everything else.
     for (const c of [...this.roomLayer.children]) {
@@ -145,6 +158,7 @@ export class CastleScene {
   }
 
   async sync(agents: Agent[], encounters: Encounter[], custom: Record<string, CharacterCustomization>, now: number, opts: { animationSpeed: number; animationsEnabled: boolean }) {
+    if (this.destroyed || !this.ready) return;
     const ids = new Set(agents.map((a) => a.id));
     for (const [id, v] of this.views) {
       if (!ids.has(id)) {
@@ -230,6 +244,8 @@ export class CastleScene {
   };
 
   destroy() {
+    this.destroyed = true;
+    if (!this.ready) return;
     document.removeEventListener("visibilitychange", this.onVisibility);
     if (this.wake) window.clearTimeout(this.wake);
     this.app.destroy(true, { children: true });

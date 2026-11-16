@@ -8,7 +8,7 @@ use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, LogicalPosition, LogicalSize, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent};
 
-use crate::platform::{overlay_rect, CloseBehavior, Rect};
+use crate::platform::{overlay_rect, CloseBehavior, OverlayPlacement, Rect};
 use crate::state::AppState;
 
 pub const CASTLE: &str = "castle";
@@ -160,6 +160,22 @@ pub fn position_overlay(app: &AppHandle, w: &WebviewWindow) {
     let r = overlay_rect(m, Some(work), s.placement, s.height, s.width_fraction);
     let _ = w.set_size(LogicalSize::new(r.width as f64, r.height as f64));
     let _ = w.set_position(LogicalPosition::new(r.x as f64, r.y as f64));
+
+    // Some platforms enforce a minimum window height (e.g. GTK/WebKit on Linux
+    // keeps webviews at least ~200 px tall). Re-check the real size once it has
+    // settled and keep the strip's edge glued to the work area.
+    let w2 = w.clone();
+    let placement = s.placement;
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(250));
+        let Ok(size) = w2.inner_size() else { return };
+        let actual = (size.height as f64 / scale).round() as i32;
+        if actual > r.height as i32 && placement == OverlayPlacement::Bottom {
+            let y = r.y + r.height as i32 - actual;
+            log::info!("overlay: window is {actual}px tall (asked {}), moving to y={y}", r.height);
+            let _ = w2.set_position(LogicalPosition::new(r.x as f64, y as f64));
+        }
+    });
 }
 
 pub fn set_overlay_visible(app: &AppHandle, visible: bool) {

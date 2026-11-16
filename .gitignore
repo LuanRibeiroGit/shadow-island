@@ -8,3 +8,4 @@ apps/desktop/src-tauri/binaries/
 test-results/
 playwright-report/
 coverage/
+dist-demo/

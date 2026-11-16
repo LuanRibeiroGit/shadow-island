@@ -76,6 +76,14 @@ pub fn system_info(app: AppHandle, state: State<'_, AppState>) -> CmdResult<Syst
     })
 }
 
+/// Errors thrown in the webviews, so a blank window can be diagnosed from the log
+/// file. Text is truncated; the logger's redaction still applies.
+#[tauri::command]
+pub fn log_client_error(window: tauri::Window, message: String) {
+    let msg: String = message.chars().take(600).collect();
+    log::error!("ui[{}]: {}", window.label(), msg);
+}
+
 #[tauri::command]
 pub fn read_logs(state: State<'_, AppState>, lines: Option<usize>) -> CmdResult<Vec<String>> {
     Ok(crate::logging::tail(&state.log_path, lines.unwrap_or(200).min(2000)))

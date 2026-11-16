@@ -1,3 +1,6 @@
+// Strict CSP (no unsafe-eval in the webview): Pixi must use its precompiled
+// shader/uniform paths.
+import "pixi.js/unsafe-eval";
 import { Application, Container } from "pixi.js";
 import type { Agent, Encounter } from "@ids/shared";
 import { homeX, stepWalker, visualFor, wanderTarget, nextVisualChange, type CharacterCustomization, type Walker } from "@ids/game-engine";
@@ -22,6 +25,9 @@ export interface ScreenPos {
  * stops entirely when there are no characters.
  */
 export class OverlayScene {
+  private ready = false;
+  private resizeObs: ResizeObserver | null = null;
+  private destroyed = false;
   readonly app = new Application();
   private world = new Container();
   private views = new Map<string, CharacterView>();
@@ -38,7 +44,17 @@ export class OverlayScene {
 
   async init(el: HTMLElement): Promise<void> {
     await this.app.init({ backgroundAlpha: 0, resizeTo: el, antialias: false, autoDensity: true, resolution: window.devicePixelRatio || 1 });
+    this.ready = true;
+    if (this.destroyed) {
+      this.app.destroy(true, { children: true });
+      return;
+    }
     el.appendChild(this.app.canvas);
+    // Pixi's resizeTo only reacts to window "resize" events. Native windows can
+    // settle their size after the page loads (positioning, scale changes) without
+    // one, so watch the element itself.
+    this.resizeObs = new ResizeObserver(() => this.app.resize());
+    this.resizeObs.observe(el);
     this.app.stage.addChild(this.world);
     this.app.stage.eventMode = "static";
     this.app.stage.on("pointermove", (e) => {
@@ -65,10 +81,12 @@ export class OverlayScene {
   }
 
   private ground(): number {
-    return this.app.screen.height - 8;
+    // Leave room under the feet for the nameplate.
+    return this.app.screen.height - 18;
   }
 
   async sync(agents: Agent[], encounters: Encounter[], now: number): Promise<void> {
+    if (this.destroyed || !this.ready) return;
     const ids = new Set(agents.map((a) => a.id));
     for (const [id, v] of this.views) {
       if (!ids.has(id)) {
@@ -184,6 +202,9 @@ export class OverlayScene {
   }
 
   destroy() {
+    this.destroyed = true;
+    this.resizeObs?.disconnect();
+    if (!this.ready) return;
     this.app.destroy(true, { children: true });
   }
 }

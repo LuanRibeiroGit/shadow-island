@@ -23,5 +23,6 @@ mkdirSync(outDir, { recursive: true });
 const dest = join(outDir, `ids-hook-${triple}${ext}`);
 copyFileSync(src, dest);
 // Dev runs (cargo/tauri dev) execute from target/<profile>: put a copy there too.
+mkdirSync(join(root, "target", "debug"), { recursive: true });
 copyFileSync(src, join(root, "target", "debug", `ids-hook${ext}`));
 console.log(`sidecar ready: ${dest}`);
