@@ -981,28 +981,28 @@
     },
     "king": {
       "image": "characters/king.png",
-      "width": 192,
-      "height": 128,
+      "width": 256,
+      "height": 256,
       "frameWidth": 32,
       "frameHeight": 32,
       "anchorX": 16,
-      "anchorY": 30,
+      "anchorY": 31,
       "animations": {
         "idle": {
           "row": 0,
-          "frames": 4
+          "frames": 8
         },
         "walk": {
-          "row": 1,
-          "frames": 6
+          "row": 2,
+          "frames": 8
         },
         "sit": {
-          "row": 2,
-          "frames": 4
+          "row": 4,
+          "frames": 8
         },
         "whip": {
-          "row": 3,
-          "frames": 4
+          "row": 6,
+          "frames": 8
         }
       }
     }

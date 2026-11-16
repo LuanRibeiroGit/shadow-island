@@ -6,6 +6,8 @@ gold hem, pale skull-like face, a whip of green mist.
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 from PIL import Image
 
 FW = FH = 32
@@ -179,7 +181,18 @@ def frame(anim, k):
     return f.img
 
 
+# Hand-drawn sheet supplied by the project owner (8x8 grid of 32x32 frames).
+# When present it replaces the procedural king below.
+CUSTOM = Path(__file__).parent / "art" / "king.png"
+CUSTOM_ANIMS = {"idle": {"row": 0, "frames": 8}, "walk": {"row": 2, "frames": 8}, "sit": {"row": 4, "frames": 8}, "whip": {"row": 6, "frames": 8}}
+
+
 def build(out_path, manifest):
+    if CUSTOM.exists():
+        sheet = Image.open(CUSTOM).convert("RGBA")
+        sheet.save(out_path)
+        manifest["environments"]["king"] = {"image": "characters/king.png", "width": sheet.width, "height": sheet.height, "frameWidth": 32, "frameHeight": 32, "anchorX": 16, "anchorY": 31, "animations": CUSTOM_ANIMS}
+        return
     cols = max(n for _, n in ROWS)
     sheet = Image.new("RGBA", (cols * FW, len(ROWS) * FH), (0, 0, 0, 0))
     anims = {}

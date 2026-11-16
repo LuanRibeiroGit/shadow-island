@@ -337,7 +337,7 @@ export class CastleScene {
     } else if (k.mode === "whipping") {
       const victim = k.target ? this.actors.get(k.target) : undefined;
       // The crack lands on the second frame.
-      if (!k.whipped && k.animT > 180) {
+      if (!k.whipped && k.animT > 330) {
         k.whipped = true;
         this.kingSay(pick(KING_CURSES), now);
         if (victim) {
@@ -383,7 +383,7 @@ export class CastleScene {
             k.mode = "whipping";
             k.whipped = false;
             k.animT = 0;
-            k.until = now + 520;
+            k.until = now + 700;
           } else {
             // The soul got away.
             k.mode = "pausing";
@@ -404,7 +404,7 @@ export class CastleScene {
     }
     k.animT += dt;
     const list = k.frames[anim] ?? [];
-    const fps = anim === "walk" ? 10 : anim === "whip" ? 8 : anim === "sit" ? 2 : 4;
+    const fps = anim === "walk" ? 10 : anim === "whip" ? 12 : anim === "sit" ? 4 : 6;
     const i = Math.floor((k.animT / 1000) * fps);
     const tex = list[anim === "whip" ? Math.min(i, list.length - 1) : i % Math.max(1, list.length)];
     if (tex) k.sprite.texture = tex;
