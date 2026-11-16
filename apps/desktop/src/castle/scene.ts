@@ -98,6 +98,8 @@ export class CastleScene {
   private cliffLayer = new Container();
   private groundLayer = new Container();
   private backdrop: Sprite | null = null;
+  /** Static floors and cliffs baked into single textures (thousands of tiles -> 2 sprites). */
+  private baked: Sprite[] = [];
   private sortLayer = new Container();
   private fxLayer = new Container();
   private highlight = new Graphics();
@@ -395,6 +397,23 @@ export class CastleScene {
     for (const b of BEDS) this.sprite("bed", b.x, b.y, this.sortLayer);
   }
 
+  /** Render the static layers once to textures; draw those instead of every tile. */
+  private bake() {
+    for (const b of this.baked) b.destroy({ texture: true, textureSource: true });
+    this.baked = [];
+    [this.cliffLayer, this.groundLayer].forEach((layer, i) => {
+      layer.visible = true;
+      const bounds = layer.getLocalBounds();
+      const tex = this.app.renderer.generateTexture({ target: layer, resolution: 1, antialias: false });
+      tex.source.scaleMode = "nearest";
+      layer.visible = false;
+      const s = new Sprite(tex);
+      s.position.set(bounds.x, bounds.y);
+      this.root.addChildAt(s, i);
+      this.baked.push(s);
+    });
+  }
+
   /** (Re)build furniture for a restoration level (unlocked by real completed missions). */
   buildRooms(level: number) {
     if (level === this.level || !this.tiles || this.destroyed) return;
@@ -411,6 +430,7 @@ export class CastleScene {
       this.propSprites.push(s);
       if (animated) this.animTiles.push({ sprite: s, base: p.tile });
     }
+    this.bake();
   }
 
   setHighlight(_hover: unknown, selected?: Room) {

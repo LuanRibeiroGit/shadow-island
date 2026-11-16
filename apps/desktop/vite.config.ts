@@ -19,7 +19,8 @@ export default defineConfig({
     strictPort: true,
     host: host || false,
     hmr: host ? { protocol: "ws", host, port: 1421 } : undefined,
-    watch: { ignored: ["**/src-tauri/**"] },
+    // dist-demo is rebuilt by the CSP e2e test; watching it would reload open pages.
+    watch: { ignored: ["**/src-tauri/**", "**/dist-demo/**", "**/dist/**"] },
   },
   preview: {
     port: 1422,
