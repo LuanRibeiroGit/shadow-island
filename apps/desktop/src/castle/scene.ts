@@ -1,7 +1,8 @@
 // Strict CSP (no unsafe-eval in the webview): Pixi must use its precompiled
 // shader/uniform paths.
 import "pixi.js/unsafe-eval";
-import { Application, Container, Graphics, Rectangle, Sprite, Texture, type FederatedPointerEvent, type TextureSource } from "pixi.js";
+import { Application, Container, Graphics, Rectangle, Sprite, Text, Texture, type FederatedPointerEvent, type TextureSource } from "pixi.js";
+import { pickLine } from "./chatter";
 import type { Agent, Encounter, Room } from "@ids/shared";
 import {
   AREAS,
@@ -82,7 +83,17 @@ interface Actor {
   leavingSince: number | null;
   lastAnim: string;
   lastState: string;
+  /** No real work: naps, then strolls around the island, then naps again. */
+  idle: boolean;
+  /** When the current nap or pause ends. */
+  idleUntil: number;
+  strollLeft: number;
+  bubble: Container | null;
+  bubbleUntil: number;
+  nextSay: number;
 }
+
+const rnd = (a: number, b: number) => a + Math.random() * (b - a);
 
 /**
  * The castle seen from above. Each real agent has a bed in the barracks: idle
@@ -485,7 +496,11 @@ export class CastleScene {
       }
       actor.lastState = vis.state;
       const d = destinationFor(vis.state, a.activity);
-      if (d.kind === "bed") this.goToBed(actor);
+      actor.idle = d.kind === "bed";
+      if (d.kind === "bed") {
+        // Keep strolling if already out for a walk; otherwise head for bed (or stay asleep).
+        if (!actor.destKey.startsWith("stroll") && actor.destKey !== "bed") this.goToBed(actor);
+      }
       else if (d.kind === "room") {
         const key = `room:${d.room}`;
         if (actor.destKey.startsWith(key)) {
@@ -547,6 +562,12 @@ export class CastleScene {
       leavingSince: null,
       lastAnim: "",
       lastState: "",
+      idle: false,
+      idleUntil: Date.now() + rnd(3000, 12000),
+      strollLeft: 0,
+      bubble: null,
+      bubbleUntil: 0,
+      nextSay: 0,
     };
     this.actors.set(a.id, actor);
     this.place(actor);
@@ -635,7 +656,10 @@ export class CastleScene {
         actor.pos = { x: s.x, y: s.y };
         actor.path = s.path;
         if (s.dx !== 0) actor.facing = s.dx > 0 ? 1 : -1;
-        if (actor.path.length === 0) actor.phase = actor.destKey === "bed" ? "sleeping" : "working";
+        if (actor.path.length === 0) {
+          actor.phase = actor.destKey === "bed" ? "sleeping" : "working";
+          actor.idleUntil = now + (actor.phase === "sleeping" ? rnd(15000, 40000) : rnd(1500, 5000));
+        }
       }
       actor.view.setFacing(actor.facing);
       const anim = this.animFor(actor, now);
@@ -643,6 +667,7 @@ export class CastleScene {
         actor.lastAnim = anim;
         void actor.view.sync(actor.agent, this.custom, now, { scale: CHAR_SCALE, ...this.viewOpts, animation: anim });
       }
+      this.idleLife(actor, now);
       if (actor.phase === "sleeping") actor.zz.alpha = 0.55 + 0.45 * Math.sin(now / 500);
       this.place(actor);
       if (actor.leavingSince !== null && actor.phase === "sleeping" && now - actor.leavingSince > LEAVE_AFTER_MS) this.remove(actor);
@@ -658,7 +683,82 @@ export class CastleScene {
     }
   }
 
+  /** Walkable outdoor tiles (plaza and paths) where idle souls stroll. */
+  private strollSpots: Point[] | null = null;
+
+  private randomSpot(): Point {
+    if (!this.strollSpots) {
+      this.strollSpots = [];
+      for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) {
+        const i = y * MAP_W + x;
+        if (this.map.roomAt[i] === "hall" && !this.map.blocked[i] && this.map.kind[i] === "floor") this.strollSpots.push({ x, y });
+      }
+    }
+    return this.strollSpots[Math.floor(Math.random() * this.strollSpots.length)] ?? { x: 20, y: 25 };
+  }
+
+  /** Idle routine: nap, get up, wander a few spots saying things, go back to bed. */
+  private idleLife(actor: Actor, now: number) {
+    const strolling = actor.destKey.startsWith("stroll");
+    if (!actor.idle || actor.leavingSince !== null) {
+      if (strolling && actor.leavingSince !== null) this.goToBed(actor);
+      this.say(actor, null, now);
+      return;
+    }
+    if (actor.phase === "sleeping" && now > actor.idleUntil) {
+      actor.strollLeft = 2 + Math.floor(Math.random() * 4);
+      this.stroll(actor);
+    } else if (actor.phase === "working" && strolling && now > actor.idleUntil) {
+      if (actor.strollLeft > 0) this.stroll(actor);
+      else this.goToBed(actor);
+    }
+    // Chatter only while out for a walk.
+    if (strolling && actor.phase !== "sleeping") {
+      if (actor.nextSay === 0) actor.nextSay = now + rnd(1500, 6000);
+      if (now > actor.nextSay) {
+        this.say(actor, pickLine(), now);
+        actor.nextSay = now + rnd(7000, 18000);
+      }
+    }
+    this.say(actor, undefined, now);
+  }
+
+  private stroll(actor: Actor) {
+    actor.strollLeft--;
+    const spot = this.randomSpot();
+    this.goTo(actor, spot, `stroll:${spot.x},${spot.y}`);
+  }
+
+  /** text: show a new line; null: hide now; undefined: just follow the soul / expire. */
+  private say(actor: Actor, text: string | null | undefined, now: number) {
+    if (text) {
+      actor.bubble?.destroy({ children: true });
+      const t = new Text({ text, style: { fontFamily: "Inter, Segoe UI, Noto Sans, sans-serif", fontSize: 12, fill: 0xe9fff6 }, resolution: 2 });
+      const w = Math.ceil(t.width) + 14;
+      const h = Math.ceil(t.height) + 8;
+      const g = new Graphics().rect(-w / 2, -h, w, h).fill({ color: 0x0b1416, alpha: 0.92 }).stroke({ width: 2, color: 0x2a4a46 });
+      g.poly([-4, 0, 4, 0, 0, 5]).fill({ color: 0x0b1416, alpha: 0.92 });
+      t.position.set(-w / 2 + 7, -h + 4);
+      const c = new Container();
+      c.addChild(g, t);
+      this.fxLayer.addChild(c);
+      actor.bubble = c;
+      actor.bubbleUntil = now + 3200;
+    }
+    if (!actor.bubble) return;
+    if (text === null || now > actor.bubbleUntil) {
+      actor.bubble.destroy({ children: true });
+      actor.bubble = null;
+      return;
+    }
+    // Constant size on screen whatever the zoom.
+    const sp = toIso(actor.pos);
+    actor.bubble.scale.set(1 / this.zoom);
+    actor.bubble.position.set(sp.x, sp.y - 24 * CHAR_SCALE - 8 / this.zoom);
+  }
+
   private remove(actor: Actor) {
+    actor.bubble?.destroy({ children: true });
     const sp = toIso(actor.pos);
     void spawnEffect(this.fxLayer, "mist", sp.x, sp.y - 10, 1);
     actor.view.destroy({ children: true });
