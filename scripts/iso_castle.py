@@ -679,7 +679,7 @@ def backdrop(path):
     img = Image.new("RGBA", (W, H))
     px = img.load()
     rnd = random.Random("backdrop")
-    top, mid, bot = rgb("#071012"), rgb("#12302c"), rgb("#0a1818")
+    top, mid, bot = rgb("#04090a"), rgb("#081715"), rgb("#050d0d")
     for y in range(H):
         t = y / H
         a, b, k = (top, mid, t / 0.55) if t < 0.55 else (mid, bot, (t - 0.55) / 0.45)
@@ -688,7 +688,7 @@ def backdrop(path):
             px[x, y] = col
     d = ImageDraw.Draw(img)
     # Distant spires and broken towers (two layers).
-    for layer, (col, base, hmax) in enumerate(((rgb("#10221f"), 330, 190), (rgb("#0c1a18"), 380, 140))):
+    for layer, (col, base, hmax) in enumerate(((rgb("#081312"), 330, 190), (rgb("#060e0d"), 380, 140))):
         x = -20
         while x < W:
             w = rnd.randrange(18, 46)
@@ -700,7 +700,7 @@ def backdrop(path):
                 for k in range(3):
                     wx = x + 4 + rnd.randrange(max(1, w - 8))
                     wy = base - h + 10 + rnd.randrange(max(1, h - 20))
-                    d.rectangle([wx, wy, wx + 2, wy + 4], fill=rgb("#3fbf8a", 140 if layer else 90))
+                    d.rectangle([wx, wy, wx + 2, wy + 4], fill=rgb("#3fbf8a", 60 if layer else 35))
             x += w + rnd.randrange(10, 60)
     # Fog bands.
     fog = Image.new("RGBA", (W, H), (0, 0, 0, 0))
@@ -708,12 +708,12 @@ def backdrop(path):
     for _ in range(26):
         cx, cy = rnd.randrange(W), rnd.randrange(220, H)
         rx, ry = rnd.randrange(80, 260), rnd.randrange(10, 30)
-        fd.ellipse([cx - rx, cy - ry, cx + rx, cy + ry], fill=(120, 190, 175, rnd.randrange(14, 34)))
+        fd.ellipse([cx - rx, cy - ry, cx + rx, cy + ry], fill=(90, 150, 138, rnd.randrange(5, 13)))
     img = Image.alpha_composite(img, fog)
     # Faint stars.
     for _ in range(60):
         x, y = rnd.randrange(W), rnd.randrange(160)
-        img.putpixel((x, y), (200, 240, 230, rnd.randrange(60, 160)))
+        img.putpixel((x, y), (200, 240, 230, rnd.randrange(30, 90)))
     img.save(path)
 
 
