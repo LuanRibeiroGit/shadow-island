@@ -823,6 +823,32 @@
           "loop": false
         }
       }
+    },
+    "task_shade": {
+      "image": "monsters/task_shade.png",
+      "frameWidth": 24,
+      "frameHeight": 24,
+      "anchorY": 22,
+      "animations": {
+        "idle": {
+          "row": 0,
+          "frames": 4,
+          "fps": 5,
+          "loop": true
+        },
+        "attack": {
+          "row": 1,
+          "frames": 4,
+          "fps": 8,
+          "loop": true
+        },
+        "vanish": {
+          "row": 2,
+          "frames": 4,
+          "fps": 6,
+          "loop": false
+        }
+      }
     }
   },
   "effects": {

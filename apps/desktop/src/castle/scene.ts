@@ -2,6 +2,7 @@
 // shader/uniform paths.
 import "pixi.js/unsafe-eval";
 import { Application, Container, Graphics, Rectangle, Sprite, Text, Texture, type FederatedPointerEvent, type TextureSource } from "pixi.js";
+import { STATE_LABEL } from "../components/labels";
 import { KING_CURSES, KING_LINES, OUCH_LINES, pick, pickChat, pickLine } from "./chatter";
 import type { Agent, Encounter, Room } from "@ids/shared";
 import {
@@ -26,6 +27,7 @@ import {
   toIso,
   findPath,
   heightAtTile,
+  WORK_ROOM,
   nextVisualChange,
   resolveCharacter,
   roomOf,
@@ -123,6 +125,12 @@ interface Actor {
   strollLeft: number;
   /** How long to stay at the spot being walked to. */
   stay: number;
+  /** The task shade this soul is fighting while it works in the arena. */
+  foe: MonsterView | null;
+  /** Pulsing ring under a working soul. */
+  ring: Graphics;
+  /** What the work bubble currently says (real task / tool / state). */
+  workText: string;
   /** In a conversation: idle routine paused. */
   talking: boolean;
   /** No new conversation before this time. */
@@ -785,11 +793,12 @@ export class CastleScene {
         if (!actor.destKey.startsWith("stroll") && actor.destKey !== "bed") this.goToBed(actor);
       }
       else if (d.kind === "room") {
-        const key = `room:${d.room}`;
+        // Whatever the activity, work happens in the one arena.
+        const key = `room:${WORK_ROOM}`;
         if (actor.destKey.startsWith(key)) {
           taken.add(`${actor.dest.x},${actor.dest.y}`);
         } else {
-          const st = stationFor(d.room, taken, order);
+          const st = stationFor(WORK_ROOM, taken, order);
           taken.add(`${st.x},${st.y}`);
           this.goTo(actor, st, `${key}:${st.x},${st.y}`);
         }
@@ -851,6 +860,9 @@ export class CastleScene {
       idleUntil: Date.now() + rnd(4000, 240000),
       strollLeft: 0,
       stay: 0,
+      foe: null,
+      ring: this.makeRing(),
+      workText: "",
       talking: false,
       chatAfter: Date.now() + rnd(8000, 40000),
       bubble: null,
@@ -891,6 +903,7 @@ export class CastleScene {
     if (now < actor.hurtUntil) return "hurt";
     if (actor.phase === "walking") return "move";
     if (actor.phase === "sleeping") return "idle";
+    if (this.fighting(actor, now)) return "attack";
     return visualFor(actor.agent, now).animation;
   }
 
@@ -1046,9 +1059,10 @@ export class CastleScene {
     const strolling = actor.destKey.startsWith("stroll");
     if (!actor.idle || actor.leavingSince !== null) {
       if (strolling && actor.leavingSince !== null) this.goToBed(actor);
-      this.say(actor, null, now);
+      this.workLife(actor, now);
       return;
     }
+    if (actor.workText) this.workLife(actor, now);
     if (actor.phase === "sleeping" && now > actor.idleUntil) {
       actor.strollLeft = 4 + Math.floor(Math.random() * 6);
       this.stroll(actor);
@@ -1163,8 +1177,80 @@ export class CastleScene {
     actor.bubble.position.set(sp.x, sp.y - 36 * CHAR_SCALE - 20 / this.zoom);
   }
 
+  /** At its post in the arena with real work in progress (not waiting for the user, not done). */
+  private fighting(actor: Actor, now: number): boolean {
+    if (actor.idle || actor.leavingSince !== null || actor.phase !== "working" || !actor.destKey.startsWith("room:")) return false;
+    const s = visualFor(actor.agent, now).state;
+    return s !== "WAITING" && s !== "SUCCESS" && s !== "ERROR" && s !== "IDLE";
+  }
+
+  /** What a working agent is really doing: its task, else its tool, else its state. */
+  private workLine(a: Agent, now: number): string {
+    const state = visualFor(a, now).state;
+    const what = a.task ?? (a.currentTool ? `${a.currentTool}${a.detail ? ` · ${a.detail}` : ""}` : STATE_LABEL[state]);
+    const line = `${STATE_LABEL[state]}: ${what}`.replace(/\s+/g, " ");
+    const text = what === STATE_LABEL[state] ? what : line;
+    return text.length > 44 ? `${text.slice(0, 43)}…` : text;
+  }
+
+  /**
+   * A working soul: a bubble saying what it is really doing, a pulsing ring under
+   * it, and, at its post in the arena, the shade of its task to fight. A real
+   * failure brings its own monster instead (see syncMonsters).
+   */
+  private workLife(actor: Actor, now: number) {
+    const working = !actor.idle && actor.leavingSince === null && visualFor(actor.agent, now).state !== "IDLE";
+    const text = working ? this.workLine(actor.agent, now) : "";
+    if (text !== actor.workText) {
+      actor.workText = text;
+      actor.bubble?.destroy({ children: true });
+      actor.bubble = text ? this.makeBubble(text, 0xd7b45a) : null;
+      actor.bubbleUntil = Number.POSITIVE_INFINITY;
+    }
+    if (actor.bubble) {
+      const sp = toIso(actor.pos);
+      actor.bubble.scale.set(1 / this.zoom);
+      actor.bubble.position.set(sp.x, sp.y - this.lift(actor.pos) - 36 * CHAR_SCALE - 20 / this.zoom);
+    }
+    const sp = toIso(actor.pos);
+    actor.ring.visible = working && !resolveCharacter(actor.agent, this.custom).hidden;
+    if (actor.ring.visible) {
+      const k = 0.5 + 0.5 * Math.sin(now / 260);
+      actor.ring.position.set(sp.x, sp.y - this.lift(actor.pos));
+      actor.ring.scale.set(0.85 + 0.25 * k);
+      actor.ring.alpha = 0.45 + 0.5 * k;
+    }
+    const hasRealMonster = this.encounters.some((e) => e.agentId === actor.id && e.status === "active");
+    const fight = this.fighting(actor, now) && !hasRealMonster;
+    if (fight && !actor.foe) {
+      actor.foe = new MonsterView({ monster: "bug_monster" } as Encounter, "task_shade");
+      this.sortLayer.addChild(actor.foe);
+      void actor.foe.play("attack", 1);
+      actor.facing = 1;
+    } else if (!fight && actor.foe) {
+      const foe = actor.foe;
+      actor.foe = null;
+      // The task is done (or interrupted): its shade dissolves.
+      void foe.play("vanish", 1).then(() => foe.onDone(() => foe.destroy()));
+      window.setTimeout(() => !foe.destroyed && foe.destroy(), 1500);
+    }
+    if (actor.foe) {
+      actor.foe.position.set(Math.round(sp.x + 27), Math.round(sp.y));
+      actor.foe.zIndex = sp.y;
+    }
+  }
+
+  private makeRing(): Graphics {
+    const g = new Graphics().ellipse(0, 0, 13, 6.5).stroke({ width: 1.5, color: 0xd7b45a }).ellipse(0, 0, 9, 4.5).stroke({ width: 1, color: 0x7cf2c2, alpha: 0.8 });
+    g.visible = false;
+    this.root.addChildAt(g, this.root.getChildIndex(this.sortLayer));
+    return g;
+  }
+
   private remove(actor: Actor) {
     actor.bubble?.destroy({ children: true });
+    actor.foe?.destroy();
+    actor.ring.destroy();
     const sp = toIso(actor.pos);
     void spawnEffect(this.fxLayer, "mist", sp.x, sp.y - 10, 1);
     actor.view.destroy({ children: true });

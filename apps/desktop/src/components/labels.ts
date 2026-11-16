@@ -44,7 +44,7 @@ export const ROOM_LABEL: Record<Room, string> = {
   throne: "Sala do Trono",
   library: "Biblioteca",
   forge: "Ferreiro",
-  laboratory: "Laboratório",
+  laboratory: "Arena",
   watchtower: "Torre de Observação",
   treasury: "Tesouraria",
   barracks: "Quartel",

@@ -370,6 +370,8 @@ MONSTERS = {
     "test_phantom": "#9fd8e8",
     "conflict_skeleton": "#e6e0cc",
     "security_beast": "#d9a33a",
+    # Not an error: the shadow of the task an agent is working on (arena sparring).
+    "task_shade": "#4a4f78",
 }
 M_ANIMS = [("idle", 4, 5, True), ("attack", 4, 8, True), ("vanish", 4, 6, False)]
 
@@ -445,6 +447,22 @@ def draw_monster(kind: str, anim: str, f: int, frames: int):
         c.line(cx + 3, 11 + bob, cx + 6, 8 + bob - (2 if anim == "attack" else 0), col)
         c.rect(cx + 5, 4 + bob, 2, 5, hexrgb("#9aa4a8"))  # two crossed swords = conflict
         c.line(cx + 3, 5 + bob, cx + 8, 8 + bob, hexrgb("#9aa4a8"))
+    elif kind == "task_shade":
+        # A horned shadow holding the scroll of the task.
+        c.ellipse(cx, 14 + bob, 5, 6, col)
+        c.ellipse(cx, 9 + bob, 4, 4, light)
+        c.line(cx - 3, 6 + bob, cx - 5, 2 + bob, dark)
+        c.line(cx + 3, 6 + bob, cx + 5, 2 + bob, dark)
+        c.px(cx - 2, 9 + bob, hexrgb("#7cf2c2"))
+        c.px(cx + 1, 9 + bob, hexrgb("#7cf2c2"))
+        c.rect(cx - 1, 11 + bob, 3, 1, VOID)
+        for i in range(4):
+            c.rect(cx - 4 + i * 3, 19 + bob, 1, 2 + (i + f) % 2, dark)
+        arm = -2 if anim == "attack" and f in (1, 2) else 0
+        c.line(cx - 5, 13 + bob, cx - 8, 12 + bob + arm, col)
+        c.rect(cx - 10, 9 + bob + arm, 3, 4, hexrgb("#e8dcc0"))
+        c.px(cx - 9, 10 + bob + arm, hexrgb("#6b4a2e"))
+        c.px(cx - 9, 12 + bob + arm, hexrgb("#6b4a2e"))
     elif kind == "security_beast":
         c.ellipse(cx, 15 + bob, 6, 5, col)
         c.ellipse(cx - 4, 10 + bob, 4, 3.5, col)

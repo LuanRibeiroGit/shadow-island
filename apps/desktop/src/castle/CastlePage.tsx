@@ -20,7 +20,7 @@ const ROOM_BLURB: Record<Room, string> = {
   throne: "Agente principal e comando geral.",
   library: "Pesquisa, leitura e investigação de código.",
   forge: "Implementação, edição e construção.",
-  laboratory: "Testes, validação e combate a erros.",
+  laboratory: "O único lugar de trabalho: cada tarefa real vira um combate aqui.",
   watchtower: "Monitoramento: sessões, eventos e alertas.",
   treasury: "Uso de tokens e custos.",
   barracks: "Agentes descansando ou aguardando.",
@@ -30,7 +30,7 @@ const ROOM_SUB: Record<Room, string> = {
   throne: "Comando geral",
   library: "Pesquisa e leitura",
   forge: "Desenvolvimento",
-  laboratory: "Testes e validação",
+  laboratory: "Trabalho e combate",
   watchtower: "Monitoramento",
   treasury: "Recursos e custos",
   barracks: "Descanso e espera",
@@ -86,7 +86,11 @@ export function CastlePage({ room }: { room?: string }) {
   const level = restorationLevel(completed ?? 0);
 
   const agents = crew.agents;
-  const encounters = useMemo(() => Object.values(world.encounters), [world]);
+  // Monsters follow the crew member doing the real agent's job.
+  const encounters = useMemo(() => {
+    const shownAs = new Map([...crew.realOf].map(([member, real]) => [real, member]));
+    return Object.values(world.encounters).map((e) => ({ ...e, agentId: shownAs.get(e.agentId) ?? e.agentId }));
+  }, [world, crew.realOf]);
   useEffect(() => {
     if (!ready || !scene.current) return;
     scene.current.buildRooms(level);
@@ -253,6 +257,21 @@ function RoomPanel({ room }: { room: Room }) {
   }
 
   if (room === "treasury") return <TreasuryPanel title={title} />;
+
+  if (room === "laboratory") {
+    const working = agents.filter((a) => visualFor(a, Date.now()).state !== "IDLE");
+    return (
+      <div>
+        <h3>{title}</h3>
+        <p className="dim">{ROOM_BLURB[room]}</p>
+        <p className="faint" style={{ fontSize: 12 }}>
+          O balão sobre cada agente mostra a tarefa ou a ferramenta real em uso. A sombra com chifres representa a tarefa em andamento e some quando ela termina. Os outros monstros só aparecem quando há uma falha real.
+        </p>
+        <h4>Trabalhando agora</h4>
+        <AgentList ids={working.map((a) => a.id)} />
+      </div>
+    );
+  }
 
   return (
     <div>

@@ -52,7 +52,7 @@ export const AREAS: RoomArea[] = [
   { room: "throne", x: 17, y: 3, w: 13, h: 10, floor: "floor_dark" },
   { room: "library", x: 3, y: 8, w: 10, h: 9, floor: "floor_wood" },
   { room: "forge", x: 34, y: 7, w: 9, h: 8, floor: "floor_stone" },
-  { room: "laboratory", x: 35, y: 20, w: 8, h: 9, floor: "floor_stone" },
+  { room: "laboratory", x: 35, y: 20, w: 8, h: 9, floor: "floor_dark" },
   { room: "watchtower", x: 3, y: 22, w: 8, h: 7, floor: "floor_stone" },
   { room: "barracks", x: 15, y: 34, w: 12, h: 8, floor: "floor_wood" },
   { room: "treasury", x: 31, y: 34, w: 9, h: 8, floor: "floor_wood" },
@@ -137,11 +137,12 @@ export const PROPS: Prop[] = [
   { tile: "rack", x: 42, y: 7 },
   ...row("barrel", [34, 42], 14),
   { tile: "brazier", x: 42, y: 11 },
-  // Laboratory.
-  ...row("potion_tank", [36, 39, 42], 20),
-  ...row("cauldron", [37, 41], 23),
-  ...table(37, 41, 26, "table_flask"),
-  ...row("crystal", [42], 28, { min: 3 }),
+  // The Arena (the one place where work happens): ghost-fire at the corners,
+  // weapon racks on the back wall, a rune ring on the floor.
+  ...row("brazier", [35, 42], 20),
+  ...row("brazier", [35, 42], 28),
+  ...row("rack", [37, 40], 20),
+  ...row("crystal", [42], 24, { min: 3 }),
   // Watchtower: the seeing orb and the telescope.
   { tile: "orb", x: 6, y: 24 },
   { tile: "telescope", x: 4, y: 22 },
@@ -182,6 +183,9 @@ function throneDais(): { x: number; y: number; floor: Floor }[] {
 /** Sides of the dais: nobody climbs it except by the steps. */
 const DAIS_BLOCK: Point[] = [3, 4, 5].flatMap((y) => [21, 25].map((x) => ({ x, y }))).concat([{ x: 22, y: 3 }, { x: 23, y: 3 }, { x: 24, y: 3 }, { x: 22, y: 4 }, { x: 24, y: 4 }, { x: 21, y: 6 }, { x: 25, y: 6 }, { x: 20, y: 5 }, { x: 26, y: 5 }, { x: 20, y: 3 }, { x: 26, y: 3 }]);
 
+/** The single room where agents work: every working agent fights its task here. */
+export const WORK_ROOM: Room = "laboratory";
+
 /** Height (px) of the floor under a tile: the throne dais and its steps. */
 export function heightAtTile(map: CastleMap, x: number, y: number): number {
   const f = x >= 0 && y >= 0 && x < MAP_W && y < MAP_H ? map.floor[y * MAP_W + x] : null;
@@ -201,7 +205,8 @@ export const STATIONS: Record<Room, Point[]> = {
   throne: [{ x: 22, y: 9 }, { x: 24, y: 9 }, { x: 21, y: 8 }, { x: 25, y: 8 }, { x: 23, y: 10 }, { x: 20, y: 11 }, { x: 26, y: 11 }],
   library: [{ x: 4, y: 11 }, { x: 6, y: 13 }, { x: 8, y: 11 }, { x: 4, y: 14 }, { x: 6, y: 16 }, { x: 10, y: 12 }, { x: 11, y: 9 }],
   forge: [{ x: 35, y: 8 }, { x: 39, y: 8 }, { x: 37, y: 10 }, { x: 41, y: 10 }, { x: 36, y: 12 }, { x: 40, y: 13 }],
-  laboratory: [{ x: 36, y: 21 }, { x: 39, y: 21 }, { x: 38, y: 23 }, { x: 37, y: 25 }, { x: 39, y: 27 }, { x: 41, y: 25 }],
+  // Fighters stand two tiles apart, each with room for a foe on its right.
+  laboratory: [22, 24, 26].flatMap((y) => [38, 36, 40].map((x) => ({ x, y }))),
   watchtower: [{ x: 6, y: 25 }, { x: 5, y: 23 }, { x: 8, y: 24 }, { x: 7, y: 27 }, { x: 4, y: 26 }, { x: 9, y: 26 }],
   treasury: [{ x: 33, y: 35 }, { x: 36, y: 35 }, { x: 34, y: 38 }, { x: 37, y: 38 }, { x: 33, y: 40 }],
   barracks: [{ x: 20, y: 36 }, { x: 20, y: 39 }, { x: 25, y: 37 }],
@@ -267,6 +272,8 @@ export function buildMap(): CastleMap {
   for (const o of OPENINGS) for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) open(x, y, "path", "hall", "door");
   // The King's Hall: runner from the door to the dais, dais under the throne.
   for (const t of throneDais()) floor[idx(t.x, t.y)] = t.floor;
+  // The Arena's rune ring.
+  for (let y = 21; y <= 27; y++) for (let x = 36; x <= 41; x++) if (x === 36 || x === 41 || y === 21 || y === 27) floor[idx(x, y)] = "rune";
   for (const p of DAIS_BLOCK) blocked[idx(p.x, p.y)] = true;
   for (const p of PROPS) if (!p.walkable) blocked[idx(p.x, p.y)] = true;
   for (const p of FOUNTAIN_BLOCK) blocked[idx(p.x, p.y)] = true;

@@ -98,7 +98,8 @@ export class MonsterView extends Container {
   encounter: Encounter;
   private anim = "";
 
-  constructor(encounter: Encounter) {
+  /** `spriteId` overrides the sprite (used for the arena's task shade, which is no encounter). */
+  constructor(encounter: Encounter, private spriteId?: string) {
     super();
     this.encounter = encounter;
   }
@@ -107,7 +108,7 @@ export class MonsterView extends Container {
     if (animation === this.anim) return;
     this.anim = animation;
     const m = await loadManifest();
-    const sprite = monsterInfo(this.encounter.monster).sprite;
+    const sprite = this.spriteId ?? monsterInfo(this.encounter.monster).sprite;
     const spec = m.monsters[sprite];
     if (!spec) return;
     const img = await loadImage(spec.image);

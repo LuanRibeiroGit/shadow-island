@@ -16,8 +16,8 @@ export function HomePage({ integration }: { integration: IntegrationInfo | null 
         <div style={{ position: "absolute", left: 24, bottom: 20, right: 24 }}>
           <h2 style={{ fontSize: 28, textShadow: "0 2px 0 #000" }}>Bem-vindo à Ilha das Sombras</h2>
           <p style={{ maxWidth: 560, textShadow: "0 1px 0 #000" }}>
-            Cada agente real do Claude Code vira um tripulante espectral. Eles leem na Biblioteca, forjam código no Ferreiro, enfrentam monstros no
-            Laboratório e celebram quando a missão termina. Tudo a partir dos eventos reais, sem dados inventados.
+            A tripulação espectral mora no castelo. Quando um agente real do Claude Code trabalha, um tripulante vai para a Arena, enfrenta a sombra da
+            tarefa e diz o que está fazendo. Tudo a partir dos eventos reais, sem dados inventados.
           </p>
         </div>
       </div>
