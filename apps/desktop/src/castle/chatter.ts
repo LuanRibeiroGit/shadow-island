@@ -73,3 +73,36 @@ export const KING_CURSES = [
 export const OUCH_LINES = ["Ai!", "Ui!", "Já vou, já vou!", "Calma, majestade!", "Isso dói!", "Tô indo!", "Ô loco!", "Ai, minhas costas!"];
 
 export const pick = (list: readonly string[], rand: () => number = Math.random): string => list[Math.floor(rand() * list.length)]!;
+
+/** Small talk when two off-duty souls meet. Lines alternate: first soul, second soul, ... */
+export const CHATS: readonly (readonly string[])[] = [
+  ["E aí, de folga?", "Até aparecer tarefa.", "Tomara que demore."],
+  ["Viu o Rei hoje?", "Vi. Tá de mau humor.", "Novidade..."],
+  ["Que névoa, hein?", "Nem enxergo a fonte.", "Melhor assim."],
+  ["Dormiu bem?", "Sonhei com um bug.", "Credo.", "Acordei suando."],
+  ["Bora na biblioteca?", "Só se tiver café.", "Fechado."],
+  ["Ouvi um deploy ontem.", "Sexta-feira?", "Sexta-feira.", "Coragem."],
+  ["Esse castelo range.", "É o vento.", "Ou o Rei."],
+  ["Quantos testes passaram?", "Todos, juro.", "Sei..."],
+  ["Tá fazendo o quê?", "Nada. E você?", "Te ajudando."],
+  ["Bonito o trono novo.", "Só não senta lá.", "Nem pensar."],
+  ["Me empresta a lanterna?", "Devolve inteira.", "Prometo nada."],
+  ["Saudade de trabalhar.", "Mentira.", "É, mentira."],
+];
+
+/** Now and then they quarrel (mild, comic). */
+export const FIGHTS: readonly (readonly string[])[] = [
+  ["Sai da frente!", "Sai você!", "Folgado!", "Abusado!"],
+  ["Foi você que quebrou o build!", "Eu?! Foi você!", "Mentiroso!", "Vai catar coquinho!"],
+  ["Devolve minha caneta!", "Que caneta?!", "Ladrão!", "Ah, vá se lascar!"],
+  ["Você ronca!", "Você fala dormindo!", "Calúnia!"],
+  ["Pisou no meu manto!", "Manto feio mesmo.", "Repete!", "Feio. Feio!"],
+  ["Esse código é seu?", "É, por quê?", "Que porcaria!", "Faz melhor então!"],
+  ["O Rei gosta mais de mim.", "Ele chicoteia você mais.", "Inveja!", "Droga, é verdade."],
+];
+
+export function pickChat(rand: () => number = Math.random): { lines: readonly string[]; fight: boolean } {
+  const fight = rand() < 0.28;
+  const list = fight ? FIGHTS : CHATS;
+  return { lines: list[Math.floor(rand() * list.length)]!, fight };
+}

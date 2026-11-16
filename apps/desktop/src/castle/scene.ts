@@ -2,7 +2,7 @@
 // shader/uniform paths.
 import "pixi.js/unsafe-eval";
 import { Application, Container, Graphics, Rectangle, Sprite, Text, Texture, type FederatedPointerEvent, type TextureSource } from "pixi.js";
-import { KING_CURSES, KING_LINES, OUCH_LINES, pick, pickLine } from "./chatter";
+import { KING_CURSES, KING_LINES, OUCH_LINES, pick, pickChat, pickLine } from "./chatter";
 import type { Agent, Encounter, Room } from "@ids/shared";
 import {
   AREAS,
@@ -60,6 +60,22 @@ function throneWall(x: number, y: number, face: "L" | "R"): string | null | unde
 }
 /** Walking speed in tiles per second. */
 const WALK_SPEED = 3.2;
+/** Off duty they amble. */
+const STROLL_SPEED = 1.5;
+/** Two idle souls this close (tiles) may stop for a chat. */
+const CHAT_RANGE = 2.4;
+/** Share of outing stops spent going to meet another soul. */
+const SEEK_COMPANY = 0.3;
+
+/** A short exchange between two idle souls who met. */
+interface Talk {
+  a: string;
+  b: string;
+  lines: readonly string[];
+  fight: boolean;
+  i: number;
+  nextAt: number;
+}
 /** Souls about one wall-height tall (36 px), in proportion to the furniture. */
 const CHAR_SCALE = 0.75;
 const MIN_ZOOM = 0.5;
@@ -105,6 +121,12 @@ interface Actor {
   /** When the current nap or pause ends. */
   idleUntil: number;
   strollLeft: number;
+  /** How long to stay at the spot being walked to. */
+  stay: number;
+  /** In a conversation: idle routine paused. */
+  talking: boolean;
+  /** No new conversation before this time. */
+  chatAfter: number;
   bubble: Container | null;
   /** Name plate above the head. */
   label: Text;
@@ -731,7 +753,19 @@ export class CastleScene {
       let actor = this.actors.get(a.id);
       const bedIdx = bedMap.get(a.id);
       const bed = bedIdx !== undefined ? BEDS[bedIdx]! : null;
-      if (!actor) actor = this.spawn(a, bed);
+      if (!actor) {
+        actor = this.spawn(a, bed);
+        // Off-duty souls do not all start in bed: about half are already out and about.
+        if (destinationFor(visualFor(a, now).state, a.activity).kind === "bed" && Math.random() < 0.55) {
+          const spot = this.idleSpot();
+          actor.pos = feetOf(spot.at);
+          actor.phase = "working";
+          actor.destKey = `stroll:${spot.at.x},${spot.at.y}`;
+          actor.dest = spot.at;
+          actor.strollLeft = 3 + Math.floor(Math.random() * 6);
+          actor.idleUntil = now + rnd(3000, 60000);
+        }
+      }
       actor.agent = a;
       actor.leavingSince = null;
       actor.bed = bed;
@@ -810,8 +844,12 @@ export class CastleScene {
       lastState: "",
       hurtUntil: 0,
       idle: false,
-      idleUntil: Date.now() + rnd(3000, 12000),
+      // Everyone on their own clock: first wake-up anywhere in the next few minutes.
+      idleUntil: Date.now() + rnd(4000, 240000),
       strollLeft: 0,
+      stay: 0,
+      talking: false,
+      chatAfter: Date.now() + rnd(8000, 40000),
       bubble: null,
       label: this.makeLabel(),
       labelText: "",
@@ -924,14 +962,15 @@ export class CastleScene {
     }
     for (const actor of [...this.actors.values()]) {
       if (actor.phase === "walking") {
-        const s = stepAlong(actor.pos, actor.path, dt, WALK_SPEED);
+        const s = stepAlong(actor.pos, actor.path, dt, actor.idle ? STROLL_SPEED : WALK_SPEED);
         const sdx = toIso(s).x - toIso(actor.pos).x;
         actor.pos = { x: s.x, y: s.y };
         actor.path = s.path;
         if (Math.abs(sdx) > 0.01) actor.facing = sdx > 0 ? 1 : -1;
         if (actor.path.length === 0) {
           actor.phase = actor.destKey === "bed" ? "sleeping" : "working";
-          actor.idleUntil = now + (actor.phase === "sleeping" ? rnd(15000, 40000) : rnd(1500, 5000));
+          // A long sleep (2 to 7 minutes), or the time this spot deserves.
+          actor.idleUntil = now + (actor.phase === "sleeping" ? rnd(120000, 420000) : actor.stay || rnd(6000, 20000));
         }
       }
       actor.view.setFacing(actor.facing);
@@ -940,12 +979,14 @@ export class CastleScene {
         actor.lastAnim = anim;
         void actor.view.sync(actor.agent, this.custom, now, { scale: CHAR_SCALE, ...this.viewOpts, animation: anim });
       }
-      this.idleLife(actor, now);
+      if (actor.talking) this.say(actor, undefined, now);
+      else this.idleLife(actor, now);
       if (actor.phase === "sleeping") actor.zz.alpha = 0.55 + 0.45 * Math.sin(now / 500);
       this.place(actor);
       if (actor.leavingSince !== null && actor.phase === "sleeping" && now - actor.leavingSince > LEAVE_AFTER_MS) this.remove(actor);
       else if (actor.leavingSince !== null && !actor.bed && now - actor.leavingSince > LEAVE_AFTER_MS) this.remove(actor);
     }
+    this.talkTick(now);
     this.kingTick(dt, now);
     for (const m of this.monsters.values()) {
       const a = this.actors.get(m.encounter.agentId);
@@ -971,7 +1012,33 @@ export class CastleScene {
     return this.strollSpots[Math.floor(Math.random() * this.strollSpots.length)] ?? { x: 20, y: 25 };
   }
 
-  /** Idle routine: nap, get up, wander a few spots saying things, go back to bed. */
+  /** Walkable floor inside each room, for off-duty visits. */
+  private roomSpots: Partial<Record<Room, Point[]>> | null = null;
+
+  /** Where an off-duty soul goes next: often into a room (and stays a while), else outdoors. */
+  private idleSpot(): { at: Point; stay: number } {
+    if (!this.roomSpots) {
+      this.roomSpots = {};
+      for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) {
+        const i = y * MAP_W + x;
+        const r = this.map.roomAt[i];
+        if (!r || r === "hall" || this.map.blocked[i] || this.map.kind[i] !== "floor" || heightAtTile(this.map, x, y) > 0) continue;
+        (this.roomSpots[r] ??= []).push({ x, y });
+      }
+    }
+    if (Math.random() < 0.5) {
+      const rooms = Object.keys(this.roomSpots) as Room[];
+      const spots = this.roomSpots[rooms[Math.floor(Math.random() * rooms.length)]!] ?? [];
+      const at = spots[Math.floor(Math.random() * spots.length)];
+      if (at) return { at, stay: rnd(40000, 130000) };
+    }
+    return { at: this.randomSpot(), stay: rnd(8000, 32000) };
+  }
+
+  /**
+   * Off-duty routine, each soul on its own clock: a long sleep, then an outing of
+   * several stops (rooms and courtyard, lingering at each), then back to bed.
+   */
   private idleLife(actor: Actor, now: number) {
     const strolling = actor.destKey.startsWith("stroll");
     if (!actor.idle || actor.leavingSince !== null) {
@@ -980,18 +1047,18 @@ export class CastleScene {
       return;
     }
     if (actor.phase === "sleeping" && now > actor.idleUntil) {
-      actor.strollLeft = 2 + Math.floor(Math.random() * 4);
+      actor.strollLeft = 4 + Math.floor(Math.random() * 6);
       this.stroll(actor);
     } else if (actor.phase === "working" && strolling && now > actor.idleUntil) {
       if (actor.strollLeft > 0) this.stroll(actor);
       else this.goToBed(actor);
     }
-    // Chatter only while out for a walk.
+    // A stray thought now and then while out.
     if (strolling && actor.phase !== "sleeping") {
-      if (actor.nextSay === 0) actor.nextSay = now + rnd(1500, 6000);
+      if (actor.nextSay === 0) actor.nextSay = now + rnd(6000, 30000);
       if (now > actor.nextSay) {
         this.say(actor, pickLine(), now);
-        actor.nextSay = now + rnd(7000, 18000);
+        actor.nextSay = now + rnd(18000, 50000);
       }
     }
     this.say(actor, undefined, now);
@@ -999,8 +1066,78 @@ export class CastleScene {
 
   private stroll(actor: Actor) {
     actor.strollLeft--;
-    const spot = this.randomSpot();
-    this.goTo(actor, spot, `stroll:${spot.x},${spot.y}`);
+    // Sometimes they go looking for company instead of a place.
+    if (Math.random() < SEEK_COMPANY) {
+      const others = [...this.actors.values()].filter((o) => o !== actor && o.idle && !o.talking && o.leavingSince === null && o.phase !== "sleeping" && o.destKey.startsWith("stroll"));
+      const friend = others[Math.floor(Math.random() * others.length)];
+      const at = friend && tileOf(friend.pos);
+      if (at && !this.map.blocked[at.y * MAP_W + at.x]) {
+        actor.stay = rnd(6000, 16000);
+        actor.chatAfter = 0;
+        this.goTo(actor, at, `stroll:${at.x},${at.y}:meet`);
+        return;
+      }
+    }
+    const spot = this.idleSpot();
+    actor.stay = spot.stay;
+    this.goTo(actor, spot.at, `stroll:${spot.at.x},${spot.at.y}`);
+  }
+
+  private talks: Talk[] = [];
+
+  /** Off-duty souls that cross paths stop, face each other and trade a few lines (sometimes a quarrel). */
+  private talkTick(now: number) {
+    const free = (a: Actor) =>
+      a.idle && !a.talking && a.leavingSince === null && a.phase !== "sleeping" && a.destKey.startsWith("stroll") && now > a.chatAfter && now > a.hurtUntil && !resolveCharacter(a.agent, this.custom).hidden;
+    const list = [...this.actors.values()].filter(free);
+    for (let i = 0; i < list.length; i++) {
+      const a = list[i]!;
+      if (a.talking) continue;
+      for (let j = i + 1; j < list.length; j++) {
+        const b = list[j]!;
+        if (b.talking || Math.hypot(a.pos.x - b.pos.x, a.pos.y - b.pos.y) > TILE_PX * CHAT_RANGE) continue;
+        // Never through a wall: they must be in the same place.
+        const ta = tileOf(a.pos);
+        const tb = tileOf(b.pos);
+        if (this.map.roomAt[ta.y * MAP_W + ta.x] !== this.map.roomAt[tb.y * MAP_W + tb.x]) continue;
+        const chat = pickChat();
+        for (const x of [a, b]) {
+          x.talking = true;
+          x.path = [];
+          x.phase = "working";
+          x.nextSay = now + rnd(20000, 50000);
+        }
+        a.facing = toIso(b.pos).x >= toIso(a.pos).x ? 1 : -1;
+        b.facing = a.facing === 1 ? -1 : 1;
+        this.talks.push({ a: a.id, b: b.id, lines: chat.lines, fight: chat.fight, i: 0, nextAt: now + 500 });
+        break;
+      }
+    }
+    this.talks = this.talks.filter((t) => {
+      const a = this.actors.get(t.a);
+      const b = this.actors.get(t.b);
+      const over = !a || !b || !a.idle || !b.idle || a.leavingSince !== null || b.leavingSince !== null || (t.i >= t.lines.length && now > t.nextAt);
+      if (over) {
+        for (const x of [a, b]) {
+          if (!x) continue;
+          x.talking = false;
+          x.chatAfter = now + rnd(50000, 130000);
+          // Linger a moment, then carry on with the outing.
+          if (x.idle) x.idleUntil = now + rnd(1500, 7000);
+        }
+        return false;
+      }
+      if (now >= t.nextAt && t.i < t.lines.length) {
+        const speaker = t.i % 2 === 0 ? a : b;
+        const other = t.i % 2 === 0 ? b : a;
+        this.say(speaker, t.lines[t.i]!, now);
+        // In a quarrel the one being shouted at flinches.
+        if (t.fight && t.i > 0) other.hurtUntil = now + 500;
+        t.i++;
+        t.nextAt = now + rnd(2300, 3200);
+      }
+      return true;
+    });
   }
 
   /** text: show a new line; null: hide now; undefined: just follow the soul / expire. */
