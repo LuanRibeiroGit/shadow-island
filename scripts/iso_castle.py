@@ -11,8 +11,8 @@ import random
 
 from PIL import Image, ImageDraw
 
-CELL_W, CELL_H = 96, 136
-AX, AY = 48, 68
+CELL_W, CELL_H = 96, 168
+AX, AY = 48, 100
 HW, HH = 16, 8  # half width / half height of a tile diamond
 
 
@@ -204,8 +204,56 @@ def floor_tile(name):
         cu, cv = int(u * 2), int(v * 2)
         return rgb("#3e3550") if (cu + cv) % 2 == 0 else rgb("#463c5a")
 
-    fns = {"path": path, "earth": earth, "plaza": plaza, "rune": rune, "dais": dais, "floor_stone": stone, "floor_check": check, "floor_wood": wood, "runner": runner, "carpet": runner, "rug": rug}
+    def dark(u, v):
+        # Dark slate slabs of the King's Hall.
+        if min(u % 0.5, v % 0.5) < 0.07:
+            return rgb("#171c1f")
+        q = (int(u * 2) + int(v * 2) * 2) % 4
+        base = rgb(("#2a3134", "#30383b", "#262c2f", "#2d3437")[q])
+        n = (int(u * 16) * 7 + int(v * 16) * 13) % 11
+        return sh(base, 1.12) if n == 0 else sh(base, 0.9) if n == 5 else base
+
+    if name.startswith("stair"):
+        return stair(name)
+    fns = {"floor_dark": dark, "path": path, "earth": earth, "plaza": plaza, "rune": rune, "dais": dais, "floor_stone": stone, "floor_check": check, "floor_wood": wood, "runner": runner, "carpet": runner, "rug": rug}
     return Iso().floor(fns[name]).img
+
+
+def stair(name):
+    """Raised floor of the throne dais: `stair{h}_{skin}`, h px tall.
+
+    Skins: stone, or the royal carpet (cl / cm / cr = left edge, middle, right edge).
+    """
+    h = int(name[5:name.index("_")])
+    skin = name.split("_")[1]
+    carpet = skin != "stone"
+
+    def top(u, v):
+        if carpet:
+            if (skin == "cl" and u < 0.14) or (skin == "cr" and u > 0.86):
+                return rgb("#c9a24a") if int(v * 16) % 4 else rgb("#8a6a2a")
+            if (skin == "cl" and 0.2 < u < 0.27) or (skin == "cr" and 0.73 < u < 0.8):
+                return rgb("#8a6a2a")
+            return rgb("#6e1b24") if (int(u * 16) + int(v * 16)) % 5 else rgb("#7d222c")
+        if min(u, v) < 0.07:
+            return rgb("#15191b")
+        n = (int(u * 16) * 5 + int(v * 16) * 3) % 9
+        return rgb("#3a4246") if n == 0 else rgb("#2f363a")
+
+    c = Iso()
+    if h > 0:
+        left = rgb("#5a151d") if carpet else rgb("#3b4347")
+        c.box(1, 1, h, rgb("#2f363a"), left, rgb("#22282b"), outline=False)
+        # Course line and a lit lip on the front faces.
+        for t in [i / 16 for i in range(17)]:
+            c.px(*c.on_left(t, h), rgb("#c9a24a") if carpet and skin == "cm" else rgb("#8a2a34") if carpet else rgb("#5d696e"))
+            c.px(*c.on_right(t, h), rgb("#3c4549"))
+            if h >= 8:
+                c.px(*c.on_left(t, h // 2), rgb("#4a1118") if carpet else rgb("#2c3336"))
+                c.px(*c.on_right(t, h // 2), rgb("#1a1f21"))
+    flat = Iso().floor(top).img
+    c.img.alpha_composite(flat.crop((0, h, CELL_W, CELL_H)), (0, 0))
+    return c.img
 
 
 def wall(name):
@@ -261,6 +309,53 @@ def wall(name):
                 c.px(x, y - 1, GOLD)
             x, y = at(0.5, 26)
             c.rect(x - 1, y, 2, 3, GLOW)
+        elif deco == "gwindow":
+            # Gothic lancet window with ghost fire behind the glass.
+            x, y = at(0.5, 20)
+            c.ellipse(x, y, 10, 14, (124, 242, 194, 30))
+            for i in range(-4, 5):
+                hgt = 26 - abs(i) * 2
+                x, y = at(0.5 + i / 16, 6)
+                for k in range(hgt):
+                    edge = abs(i) == 4 or k == hgt - 1 or k == 0
+                    if edge:
+                        col = rgb("#12181a")
+                    else:
+                        t = k / hgt
+                        col = rgb("#1f7a5e") if t < 0.3 else rgb("#2fae84") if t < 0.6 else rgb("#6fe6bb")
+                        if (i * 3 + k) % 7 == 0:
+                            col = rgb("#bff7e2")
+                        if i == 0 or k == 12:
+                            col = rgb("#16302c")
+                    c.px(x, y - k, col)
+        elif deco == "crown":
+            # Blood-red royal banner with a gold crown.
+            for i in range(-4, 5):
+                x, y = at(0.5 + i / 16, 37)
+                length = 24 - abs(i)
+                for k in range(length):
+                    c.px(x, y + k, rgb("#7d1f28") if abs(i) < 4 else rgb("#5a151d"))
+                c.px(x, y - 1, GOLD)
+                c.px(x, y + length, rgb("#c9a24a"))
+            for i, ks in ((-2, (8, 9, 10, 11)), (-1, (10, 11)), (0, (7, 8, 9, 10, 11)), (1, (10, 11)), (2, (8, 9, 10, 11))):
+                x, y = at(0.5 + i / 16, 37)
+                for k in ks:
+                    c.px(x, y + k, GOLD)
+        elif deco in ("tapestry", "tapestryc"):
+            # Great spectral tapestry behind the throne (tiles side by side).
+            for i in range(0, 17):
+                x, y = at(i / 16, 39)
+                for k in range(35):
+                    col = rgb("#0f3a35") if (i + k // 5) % 4 else rgb("#16504a")
+                    if k > 26 and (i * 5 + k) % 3 == 0:
+                        col = rgb("#2fae84")
+                    c.px(x, y + k, col)
+                c.px(x, y - 1, GOLD)
+            if deco == "tapestryc":
+                for i, ks in ((-5, range(6, 14)), (-4, range(9, 14)), (-3, range(10, 14)), (-2, range(8, 14)), (-1, range(10, 14)), (0, range(4, 14)), (1, range(10, 14)), (2, range(8, 14)), (3, range(10, 14)), (4, range(9, 14)), (5, range(6, 14))):
+                    x, y = at(0.5 + i / 16, 39)
+                    for k in ks:
+                        c.px(x, y + k, rgb("#6fe6bb") if k < 13 else rgb("#2fae84"))
         elif deco == "window":
             for i in range(-2, 3):
                 x, y = at(0.5 + i / 16, 30)
@@ -473,34 +568,117 @@ def prop(name):
                         c.px(x, y, col)
                 t += rnd.choice((0.05, 0.07))
     elif name == "throne_big":
-        c.shadow(0.7)
-        c.box(1, 0.8, 5, rgb("#3a3350"))
-        c.box(1, 0.8, 1, rgb("#a88a44"), z=5, outline=False)
-        c.box(0.9, 0.25, 52, rgb("#1f2a2e"), rgb("#2a3a3c"), rgb("#18201f"), z=6, oy=-0.3)
-        # Spiked crown on the backrest with a glowing soul gem.
-        for gx in (-0.35, 0.0, 0.35):
-            c.box(0.12, 0.12, 12 if gx == 0 else 8, rgb("#2a3a3c"), z=58, ox=gx, oy=-0.3)
-        x, y = P(0, -0.15, 46)
-        c.ellipse(x, y, 9, 8, (124, 242, 194, 50))
-        c.ellipse(x, y, 2.6, 3.2, GLOW)
+        # A giant throne of dark iron with dozens of swords fanned behind it.
+        c.shadow(1.1)
+        c.box(1.8, 1.5, 3, rgb("#1d2225"))
+        c.box(1.6, 1.3, 3, rgb("#262c2f"), z=3)
+
+        def sword(cx, cy, ang, ln, steel, edge, hilt_up):
+            a = math.radians(ang)
+            sx, sy = math.sin(a), -math.cos(a)
+            for k in range(ln):
+                x, y = cx + sx * k, cy + sy * k
+                if hilt_up and k >= ln - 6:
+                    c.px(x, y, rgb("#5a4420") if k < ln - 1 else rgb("#e6c66a"))
+                    continue
+                c.px(x, y, steel if k < ln - 2 or hilt_up else rgb("#c3ced2"))
+                c.px(x + 1, y, edge)
+                if k % 2:
+                    c.px(x - 1, y, sh(steel, 0.6))
+            if hilt_up:
+                gx, gy = cx + sx * (ln - 7), cy + sy * (ln - 7)
+                for t in (-3, -2, -1, 0, 1, 2, 3):
+                    c.px(gx - sy * t, gy + sx * t, rgb("#b08a3a"))
+
+        # Far row (long, dim), middle row, near row (short, bright). Some hilt-up.
+        cx, cy = P(0, -0.55, 34)
+        for n, ang in enumerate(range(-84, 85, 8)):
+            sword(cx, cy, ang, int(56 - abs(ang) * 0.17 + (n * 7) % 8), rgb("#3f494e"), rgb("#15191b"), n % 4 == 1)
+        cx, cy = P(0, -0.5, 30)
+        for n, ang in enumerate(range(-76, 77, 9)):
+            sword(cx + n % 2, cy, ang + 3, int(46 - abs(ang) * 0.15 + (n * 5) % 7), rgb("#5d696e"), rgb("#1c2124"), n % 3 == 0)
+        cx, cy = P(0, -0.45, 26)
+        for n, ang in enumerate(range(-66, 67, 12)):
+            sword(cx, cy, ang - 2, int(34 - abs(ang) * 0.1 + (n * 3) % 5), rgb("#8d9aa0"), rgb("#2a3135"), n % 3 == 2)
+        # Backrest, with a soul gem set at its crest.
+        c.box(1.2, 0.3, 54, rgb("#30383c"), rgb("#262d30"), rgb("#161a1c"), z=6, oy=-0.5)
+        for gx in (-0.5, -0.25, 0.0, 0.25, 0.5):
+            c.box(0.1, 0.1, 9 if gx == 0 else 6, rgb("#59656a"), z=60, ox=gx, oy=-0.5)
+        x, y = P(0, -0.34, 52)
+        c.ellipse(x, y, 8, 7, (124, 242, 194, 45))
+        c.ellipse(x, y, 2.4, 3, GLOW)
         c.px(x, y - 1, rgb("#e9fff6"))
-        c.box(0.8, 0.55, 14, rgb("#2e5a54"), z=6, oy=0.1)
-        c.box(0.15, 0.6, 22, rgb("#a88a44"), z=6, ox=-0.42, oy=0.05)
-        c.box(0.15, 0.6, 22, rgb("#a88a44"), z=6, ox=0.42, oy=0.05)
-        for gx in (-0.42, 0.42):
-            x, y = P(gx, 0.05, 30)
-            c.ellipse(x, y, 2, 2, GLOW)
+        # Blades jutting from the sides.
+        for side in (-1, 1):
+            bx, by = P(0.66 * side, -0.1, 18)
+            for ang, ln in ((58, 18), (74, 15), (44, 21), (88, 12)):
+                sword(bx, by, ang * side, ln, rgb("#66737a"), rgb("#1c2124"), False)
+        # Seat, cushion and armrests.
+        c.box(1.1, 0.85, 14, rgb("#2a3034"), z=6, oy=0.08)
+        c.box(0.9, 0.7, 2, rgb("#5a151d"), z=20, oy=0.1, outline=False)
+        for gx in (-0.62, 0.62):
+            c.box(0.2, 0.95, 26, rgb("#3a4347"), z=6, ox=gx, oy=0.05)
+            x, y = P(gx, 0.5, 33)
+            c.ellipse(x, y, 1.8, 1.8, GLOW)
+    elif name == "knight_statue":
+        c.shadow(0.45)
+        c.box(0.74, 0.74, 3, rgb("#2b3235"))
+        c.box(0.6, 0.6, 9, rgb("#3a4246"), z=3)
+        x, y = P(0, 0, 12)
+        iron, lit, dk = rgb("#4a5458"), rgb("#7c8a90"), rgb("#2a3033")
+        c.rect(x - 3, y - 9, 3, 9, iron)
+        c.rect(x + 1, y - 9, 3, 9, dk)
+        c.rect(x - 4, y - 19, 9, 11, iron)
+        c.rect(x + 2, y - 19, 3, 11, dk)
+        c.rect(x - 4, y - 13, 9, 1, dk)
+        c.ellipse(x - 5, y - 18, 2.4, 2.4, lit)
+        c.ellipse(x + 5, y - 18, 2.4, 2.4, iron)
+        c.rect(x - 6, y - 16, 2, 7, iron)
+        c.rect(x + 5, y - 16, 2, 7, dk)
+        c.ellipse(x, y - 23, 3.2, 3.6, iron)
+        c.rect(x - 2, y - 24, 5, 1, rgb("#0d1011"))
+        c.px(x - 1, y - 24, GLOW)
+        c.px(x + 1, y - 24, GLOW)
+        c.rect(x, y - 29, 1, 3, rgb("#7d1f28"))
+        # Greatsword resting point-down in front.
+        c.rect(x, y - 15, 1, 16, lit)
+        c.rect(x - 2, y - 15, 5, 1, rgb("#c9a24a"))
+        c.rect(x, y - 18, 1, 3, rgb("#5a4420"))
+    elif name.startswith("candelabra"):
+        f = 1 if name.endswith("1") else 0
+        c.shadow(0.22)
+        x, y = P(0, 0)
+        brass, dkb = rgb("#b08a3a"), rgb("#6a5020")
+        c.rect(x - 3, y, 7, 1, dkb)
+        c.rect(x - 1, y - 1, 3, 1, brass)
+        c.rect(x, y - 30, 1, 29, brass)
+        c.px(x, y - 15, rgb("#e6c66a"))
+        c.rect(x - 5, y - 29, 11, 1, brass)
+        c.px(x - 5, y - 30, dkb)
+        c.px(x + 5, y - 30, dkb)
+        for k, dx in enumerate((-5, 0, 5)):
+            top = y - 36 - (3 if dx == 0 else 0)
+            c.ellipse(x + dx, top - 2, 5, 5, (255, 180, 90, 34))
+            c.rect(x + dx, top, 1, 6, rgb("#e8dcc0"))
+            fl = (f + k) % 2
+            c.px(x + dx, top - 1, rgb("#ffb347"))
+            c.px(x + dx, top - 2 - fl, rgb("#fff2c0"))
+            if fl:
+                c.px(x + dx, top - 2, rgb("#ffd27a"))
     elif name.startswith("brazier"):
         f = name.endswith("1")
-        c.shadow(0.3)
-        c.box(0.14, 0.14, 14, rgb("#2b3135"))
-        x, y = P(0, 0, 14)
-        c.ellipse(x, y, 7, 3, rgb("#3a4448"))
-        c.ellipse(x, y - 1, 6, 2.2, rgb("#1a2224"))
-        c.ellipse(x, y - 6, 12, 11, (124, 242, 194, 40))
-        c.ellipse(x, y - 4 - f, 4, 5, rgb("#3fbf8a"))
-        c.ellipse(x + (1 if f else -1), y - 6 - f, 2.4, 4, GLOW)
-        c.ellipse(x, y - 3, 1.4, 2, rgb("#e9fff6"))
+        c.shadow(0.4)
+        c.box(0.56, 0.56, 3, rgb("#2b3235"))
+        c.box(0.4, 0.4, 9, rgb("#3a4246"), z=3)
+        x, y = P(0, 0, 13)
+        c.ellipse(x, y - 1, 8, 4, rgb("#1d2225"))
+        c.ellipse(x, y - 2, 8, 3, rgb("#4a5458"))
+        c.ellipse(x, y - 2, 6.5, 2.2, rgb("#123a30"))
+        c.ellipse(x, y - 9, 13, 13, (124, 242, 194, 38))
+        c.ellipse(x, y - 6 - f, 4.5, 6, rgb("#2fae84"))
+        c.ellipse(x + (1 if f else -1), y - 9 - f, 2.8, 5.5, GLOW)
+        c.ellipse(x - (1 if f else -1), y - 13 - f * 2, 1.2, 3, GLOW)
+        c.ellipse(x, y - 5, 1.6, 2.4, rgb("#e9fff6"))
     elif name == "banner_stand":
         c.shadow(0.2)
         x, y = P(0, 0)
@@ -661,15 +839,16 @@ def cliff(name):
     return c.img
 
 
-FLOORS = ["floor_stone", "floor_wood", "floor_check", "runner", "carpet", "rug", "path", "earth", "plaza", "rune", "dais"]
+STAIRS = [f"stair{h}_{k}" for h in (0, 4, 8, 12) for k in ("stone", "cl", "cm", "cr")]
+FLOORS = STAIRS + ["floor_dark", "floor_stone", "floor_wood", "floor_check", "runner", "carpet", "rug", "path", "earth", "plaza", "rune", "dais"]
 CLIFFS = ["cliff", "cliff_fall_L", "cliff_fall_R"]
-WALLS = ["wall_tall", "wall_low", "wall_broken"] + [f"wall_tall_{s}_{d}" for s in ("L", "R") for d in ("torch0", "torch1", "banner", "window")]
+WALLS = ["wall_tall", "wall_low", "wall_broken"] + [f"wall_tall_{s}_{d}" for s in ("L", "R") for d in ("torch0", "torch1", "banner", "window", "gwindow", "crown", "tapestry", "tapestryc")]
 PROPS = [
     "bookshelf", "table_l", "table_m", "table_r", "table_book", "table_candle", "table_map", "table_flask",
     "chair_n", "chair_s", "bench", "plant", "pillar", "statue", "throne", "candles", "crystal", "chest", "gold",
     "barrel", "telescope", "map_table", "forge0", "forge1", "anvil", "cauldron0", "cauldron1", "rack", "bed",
     "sleeper", "zz", "bookshelf_side", "throne_big", "brazier0", "brazier1", "banner_stand", "orb", "potion_tank",
-    "fountain0", "fountain1", "lantern0", "lantern1", "tree_dead", "grave", "broken_pillar",
+    "knight_statue", "candelabra0", "candelabra1", "fountain0", "fountain1", "lantern0", "lantern1", "tree_dead", "grave", "broken_pillar",
 ]
 
 

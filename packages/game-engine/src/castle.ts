@@ -11,7 +11,9 @@ export const MAP_W = 46;
 export const MAP_H = 46;
 export const TILE_PX = 16;
 
-export type Floor = "floor_stone" | "floor_wood" | "floor_check" | "carpet" | "runner" | "rug" | "path" | "earth" | "plaza" | "rune" | "dais";
+type StairSkin = "stone" | "cl" | "cm" | "cr";
+/** `stair{h}_{skin}`: raised floor of the throne dais, h pixels above the ground. */
+export type Floor = `stair${0 | 4 | 8 | 12}_${StairSkin}` | "floor_dark" | "floor_stone" | "floor_wood" | "floor_check" | "carpet" | "runner" | "rug" | "path" | "earth" | "plaza" | "rune" | "dais";
 
 export interface Point {
   x: number;
@@ -47,7 +49,7 @@ export interface Prop {
 export const PLAZA = { x: 23, y: 24, r: 6.5 };
 
 export const AREAS: RoomArea[] = [
-  { room: "throne", x: 17, y: 3, w: 13, h: 10, floor: "floor_check" },
+  { room: "throne", x: 17, y: 3, w: 13, h: 10, floor: "floor_dark" },
   { room: "library", x: 3, y: 8, w: 10, h: 9, floor: "floor_wood" },
   { room: "forge", x: 34, y: 7, w: 9, h: 8, floor: "floor_stone" },
   { room: "laboratory", x: 35, y: 20, w: 8, h: 9, floor: "floor_stone" },
@@ -110,13 +112,17 @@ function table(x0: number, x1: number, y: number, top = "table_m"): Prop[] {
 }
 
 export const PROPS: Prop[] = [
-  // King's Hall: the throne on a dais at the head of the runner, braziers, pillars, banners.
+  // King's Hall: a throne of swords on a stepped dais at the head of the royal carpet,
+  // ghost-fire braziers at its corners, guardian statues, candelabra and pillars.
   { tile: "throne_big", x: 23, y: 4 },
-  ...row("brazier", [20, 26], 4),
-  ...row("banner_stand", [18, 28], 3),
-  ...col("pillar", 19, [7, 10]),
-  ...col("pillar", 27, [7, 10]),
-  ...row("candles", [21, 25], 3),
+  ...row("brazier", [21, 25], 5),
+  ...row("brazier", [21, 25], 7),
+  ...row("knight_statue", [19, 27], 3),
+  ...row("knight_statue", [18, 28], 6),
+  ...row("candelabra", [20, 26], 4),
+  ...row("candelabra", [20, 26], 9),
+  ...col("pillar", 19, [8, 11]),
+  ...col("pillar", 27, [8, 11]),
   ...row("crystal", [17, 29], 12, { min: 3 }),
   ...row("statue", [17, 29], 6, { min: 2 }),
   // Library.
@@ -161,6 +167,27 @@ export const PROPS: Prop[] = [
 ];
 
 /** Tiles around the fountain that block walking (it is wider than one tile). */
+/**
+ * The King's dais: a platform (x 21..25, y 3..5) 12 px above the hall, two steps
+ * down in front of it, and the royal carpet from the throne to the door.
+ */
+function throneDais(): { x: number; y: number; floor: Floor }[] {
+  const out: { x: number; y: number; floor: Floor }[] = [];
+  const skin = (x: number): StairSkin => (x === 22 ? "cl" : x === 23 ? "cm" : x === 24 ? "cr" : "stone");
+  for (let y = 3; y <= 5; y++) for (let x = 21; x <= 25; x++) out.push({ x, y, floor: `stair12_${y === 3 ? "stone" : skin(x)}` });
+  for (let x = 22; x <= 24; x++) out.push({ x, y: 6, floor: `stair8_${skin(x)}` }, { x, y: 7, floor: `stair4_${skin(x)}` });
+  for (let y = 8; y <= 12; y++) for (let x = 22; x <= 24; x++) out.push({ x, y, floor: `stair0_${skin(x)}` });
+  return out;
+}
+/** Sides of the dais: nobody climbs it except by the steps. */
+const DAIS_BLOCK: Point[] = [3, 4, 5].flatMap((y) => [21, 25].map((x) => ({ x, y }))).concat([{ x: 22, y: 3 }, { x: 23, y: 3 }, { x: 24, y: 3 }, { x: 22, y: 4 }, { x: 24, y: 4 }, { x: 21, y: 6 }, { x: 25, y: 6 }, { x: 20, y: 5 }, { x: 26, y: 5 }, { x: 20, y: 3 }, { x: 26, y: 3 }]);
+
+/** Height (px) of the floor under a tile: the throne dais and its steps. */
+export function heightAtTile(map: CastleMap, x: number, y: number): number {
+  const f = x >= 0 && y >= 0 && x < MAP_W && y < MAP_H ? map.floor[y * MAP_W + x] : null;
+  return f && f.startsWith("stair") ? Number.parseInt(f.slice(5), 10) : 0;
+}
+
 const FOUNTAIN_BLOCK: Point[] = range(-1, 1).flatMap((dx) => range(-1, 1).map((dy) => ({ x: PLAZA.x + dx, y: PLAZA.y + dy })));
 
 /** Bed tiles (in the dormitory). Agents sleep here when idle. */
@@ -171,7 +198,7 @@ export const NAP_SPOT: Point = { x: 20, y: 38 };
 
 /** Where an agent stands to work in each room (chairs, in front of the furniture). */
 export const STATIONS: Record<Room, Point[]> = {
-  throne: [{ x: 22, y: 6 }, { x: 24, y: 6 }, { x: 21, y: 8 }, { x: 25, y: 8 }, { x: 23, y: 10 }, { x: 20, y: 11 }, { x: 26, y: 11 }],
+  throne: [{ x: 22, y: 9 }, { x: 24, y: 9 }, { x: 21, y: 8 }, { x: 25, y: 8 }, { x: 23, y: 10 }, { x: 20, y: 11 }, { x: 26, y: 11 }],
   library: [{ x: 4, y: 11 }, { x: 6, y: 13 }, { x: 8, y: 11 }, { x: 4, y: 14 }, { x: 6, y: 16 }, { x: 10, y: 12 }, { x: 11, y: 9 }],
   forge: [{ x: 35, y: 8 }, { x: 39, y: 8 }, { x: 37, y: 10 }, { x: 41, y: 10 }, { x: 36, y: 12 }, { x: 40, y: 13 }],
   laboratory: [{ x: 36, y: 21 }, { x: 39, y: 21 }, { x: 38, y: 23 }, { x: 37, y: 25 }, { x: 39, y: 27 }, { x: 41, y: 25 }],
@@ -239,8 +266,8 @@ export function buildMap(): CastleMap {
   for (const a of AREAS) for (let y = a.y; y < a.y + a.h; y++) for (let x = a.x; x < a.x + a.w; x++) open(x, y, a.floor, a.room);
   for (const o of OPENINGS) for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) open(x, y, "path", "hall", "door");
   // The King's Hall: runner from the door to the dais, dais under the throne.
-  for (let y = 5; y < 13; y++) for (let x = 22; x <= 24; x++) floor[idx(x, y)] = "runner";
-  for (let y = 3; y <= 5; y++) for (let x = 20; x <= 26; x++) floor[idx(x, y)] = "dais";
+  for (const t of throneDais()) floor[idx(t.x, t.y)] = t.floor;
+  for (const p of DAIS_BLOCK) blocked[idx(p.x, p.y)] = true;
   for (const p of PROPS) if (!p.walkable) blocked[idx(p.x, p.y)] = true;
   for (const p of FOUNTAIN_BLOCK) blocked[idx(p.x, p.y)] = true;
   for (const b of BEDS) blocked[idx(b.x, b.y)] = true;

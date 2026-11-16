@@ -25,6 +25,7 @@ import {
   isoOfTile,
   toIso,
   findPath,
+  heightAtTile,
   nextVisualChange,
   resolveCharacter,
   roomOf,
@@ -42,7 +43,21 @@ import { loadImage, loadManifest } from "../characters/sprites";
 export const CASTLE_W = ISO_SIZE.w;
 export const CASTLE_H = ISO_SIZE.h;
 
-const ANIMATED = new Set(["forge", "cauldron", "brazier", "lantern", "fountain"]);
+const ANIMATED = new Set(["forge", "cauldron", "brazier", "lantern", "fountain", "candelabra"]);
+
+/**
+ * Decoration of the King's Hall back walls: a great tapestry behind the throne,
+ * lancet windows of ghost fire, royal banners and torches. `undefined` = not a
+ * throne wall (the caller picks the usual decoration), `null` = bare stone.
+ */
+function throneWall(x: number, y: number, face: "L" | "R"): string | null | undefined {
+  if (face === "L" && y === 2 && x >= 17 && x <= 29) {
+    if (x >= 22 && x <= 24) return x === 23 ? "tapestryc" : "tapestry";
+    return ["gwindow", "torch", "crown", "gwindow", "torch"][x <= 21 ? x - 17 : 29 - x] ?? null;
+  }
+  if (face === "R" && x === 16 && y >= 3 && y <= 12) return ["gwindow", "torch", "crown", null, "gwindow"][(y - 3) % 5] ?? null;
+  return undefined;
+}
 /** Walking speed in tiles per second. */
 const WALK_SPEED = 3.2;
 /** Souls about one wall-height tall (36 px), in proportion to the furniture. */
@@ -412,7 +427,8 @@ export class CastleScene {
     const tex = list[anim === "whip" ? Math.min(i, list.length - 1) : i % Math.max(1, list.length)];
     if (tex) k.sprite.texture = tex;
     const sp = toIso(k.pos);
-    const seat = k.mode === "sitting" ? 12 : 0;
+    // Seated: on the cushion of the throne, between its armrests.
+    const seat = (k.mode === "sitting" ? 11 : 0) + this.lift(k.pos);
     k.sprite.scale.set(KING_SCALE * (k.mode === "sitting" ? 1 : k.facing), KING_SCALE);
     k.sprite.position.set(Math.round(sp.x), Math.round(sp.y - seat));
     k.sprite.zIndex = sp.y + (k.mode === "sitting" ? 1 : 0.5);
@@ -523,8 +539,10 @@ export class CastleScene {
   /** Room name plates: screen positions above each room, for the HTML layer. */
   labels(): { room: Room; x: number; y: number }[] {
     return AREAS.filter((a): a is typeof a & { room: Room } => a.room !== "hall").map((a) => {
-      const p = toIso({ x: (a.x + a.w / 2) * TILE_PX, y: a.y * TILE_PX });
-      const g = this.root.toGlobal({ x: p.x, y: p.y - 46 });
+      // The King's Hall plate hangs at the far corner so it never covers the throne.
+      const royal = a.room === "throne";
+      const p = toIso({ x: (a.x + (royal ? a.w - 1 : a.w / 2)) * TILE_PX, y: a.y * TILE_PX });
+      const g = this.root.toGlobal({ x: p.x, y: p.y - (royal ? 62 : 46) });
       return { room: a.room, x: g.x, y: g.y };
     });
   }
@@ -556,6 +574,12 @@ export class CastleScene {
   }
 
   /** A sprite standing on tile (x, y): anchored at the tile centre, depth-sorted by it. */
+  /** How far above the ground a position stands (the throne dais and its steps). */
+  private lift(pos: Point): number {
+    const t = tileOf(pos);
+    return heightAtTile(this.map, t.x, t.y);
+  }
+
   private sprite(name: string, x: number, y: number, parent: Container, bias = 0): Sprite | null {
     const t = this.tex(name);
     if (!t || !this.tiles) return null;
@@ -614,7 +638,10 @@ export class CastleScene {
         const face = room(x, y + 1) ? "L" : room(x + 1, y) ? "R" : null;
         n++;
         let name = "wall_tall";
-        if (face) {
+        const royal = face ? throneWall(x, y, face) : undefined;
+        if (royal !== undefined) {
+          if (royal) name = `wall_tall_${face}_${royal === "torch" ? "torch0" : royal}`;
+        } else if (face) {
           const deco = n % 4 === 1 ? "torch" : n % 5 === 3 ? "banner" : n % 7 === 0 ? "window" : null;
           if (deco === "torch") name = `wall_tall_${face}_torch0`;
           else if (deco) name = `wall_tall_${face}_${deco}`;
@@ -656,6 +683,7 @@ export class CastleScene {
       const flat = p.walkable === true;
       const s = this.sprite(animated ? `${p.tile}0` : p.tile, p.x, p.y, flat ? this.groundLayer : this.sortLayer);
       if (!s) continue;
+      s.y -= heightAtTile(this.map, p.x, p.y);
       this.propSprites.push(s);
       if (animated) this.animTiles.push({ sprite: s, base: p.tile });
     }
@@ -843,9 +871,10 @@ export class CastleScene {
     view.visible = !sleeping && !ch.hidden;
     sleeper.visible = sleeping && !ch.hidden;
     zz.visible = sleeper.visible;
-    const sp = toIso(actor.pos);
+    const ground = toIso(actor.pos);
+    const sp = { x: ground.x, y: ground.y - this.lift(actor.pos) };
     view.position.set(Math.round(sp.x), Math.round(sp.y));
-    view.zIndex = sp.y + 0.5;
+    view.zIndex = ground.y + 0.5;
     // Name above the head (or above the bed), constant size on screen.
     const { label } = actor;
     if (actor.labelText !== ch.name) {
@@ -989,6 +1018,7 @@ export class CastleScene {
     }
     // Constant size on screen whatever the zoom.
     const sp = toIso(actor.pos);
+    sp.y -= this.lift(actor.pos);
     actor.bubble.scale.set(1 / this.zoom);
     actor.bubble.position.set(sp.x, sp.y - 36 * CHAR_SCALE - 20 / this.zoom);
   }
