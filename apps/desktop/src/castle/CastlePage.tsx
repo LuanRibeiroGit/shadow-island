@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Room } from "@ids/shared";
 import { activeAgents, activeSessions, agentsByRoom, currentQuest, openMissions } from "@ids/event-system";
 import { estimateCost, formatTokens, formatUsd, sumUsage } from "@ids/analytics";
-import { isCrewId, resolveCharacter, visualFor } from "@ids/game-engine";
+import { resolveCharacter, visualFor } from "@ids/game-engine";
 import { useWorld } from "../stores/world";
 import { useSettings } from "../stores/settings";
 import { useCharacters } from "../stores/characters";
@@ -13,6 +13,7 @@ import { Portrait } from "../components/Portrait";
 import { QualityBadge } from "../components/Stat";
 import { EVENT_LABEL, MISSION_CLASS, MISSION_LABEL, ROOM_LABEL, STATE_CLASS, STATE_LABEL, fmtTime, timeAgo } from "../components/labels";
 import { CastleScene } from "./scene";
+import { CharacterProfile } from "./CharacterProfile";
 import { restorationLevel, RESTORATION_LABEL, RESTORATION_THRESHOLDS } from "./layout";
 import { useT } from "../i18n";
 
@@ -47,28 +48,21 @@ export function CastlePage({ room }: { room?: string }) {
   const settings = useSettings((s) => s.settings);
   const custom = useCharacters((s) => s.custom);
   const crew = useCrew();
-  const realOf = useRef(crew.realOf);
-  realOf.current = crew.realOf;
   const go = useUi((s) => s.go);
   const selected = (room as Room | undefined) ?? "throne";
   const [named, setNamed] = useState<Room | null>(null);
+  const [profile, setProfile] = useState<string | null>(null);
 
   useEffect(() => {
     const s = new CastleScene();
-    scene.current = s;
-    // A room's name plate shows only after that room is clicked; a click elsewhere hides it.
+    scene.current = s;    // A room's name plate shows only after that room is clicked; a click elsewhere hides it.
     s.onRoom = (r) => {
       setNamed(r);
       go({ page: "castle", room: r });
     };
     s.onEmpty = () => setNamed(null);
-    // A crew member doing a real agent's job opens that agent; a resting one opens the crew page.
-    s.onAgent = (id) => {
-      const real = realOf.current.get(id);
-      if (real) go({ page: "agent", agentId: real });
-      else if (isCrewId(id)) go({ page: "characters" });
-      else go({ page: "agent", agentId: id });
-    };
+    // A click on a soul opens its profile: what it is doing, its name and looks.
+    s.onAgent = setProfile;
     s.onZoom = (z, fit) => setZoom({ zoom: z, fit });
     s.onCamera = setPlates;
     void s.init(host.current!).then(() => setReady(true));
@@ -133,6 +127,7 @@ export function CastlePage({ room }: { room?: string }) {
         </div>
         <RoomPanel room={selected} />
       </aside>
+      {profile && <CharacterProfile id={profile} doing={(id) => scene.current?.describe(id) ?? null} onClose={() => setProfile(null)} />}
     </div>
   );
 }

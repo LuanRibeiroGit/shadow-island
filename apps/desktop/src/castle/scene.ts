@@ -2,7 +2,7 @@
 // shader/uniform paths.
 import "pixi.js/unsafe-eval";
 import { Application, Container, Graphics, Rectangle, Sprite, Text, Texture, type FederatedPointerEvent, type TextureSource } from "pixi.js";
-import { STATE_LABEL } from "../components/labels";
+import { ROOM_LABEL, STATE_LABEL } from "../components/labels";
 import { KING_CURSES, KING_LINES, OUCH_LINES, pick, pickChat, pickLine } from "./chatter";
 import type { Agent, Encounter, Room } from "@ids/shared";
 import {
@@ -243,6 +243,9 @@ export class CastleScene {
     this.app.canvas.style.imageRendering = "pixelated";
     el.appendChild(this.app.canvas);
     this.sortLayer.sortableChildren = true;
+    // Names, bubbles and effects float above the souls and must let clicks through.
+    this.fxLayer.eventMode = "none";
+    this.highlight.eventMode = "none";
     this.root.addChild(this.cliffLayer, this.groundLayer, this.highlight, this.sortLayer, this.fxLayer);
     this.app.stage.addChild(this.root);
     this.app.ticker.maxFPS = 30;
@@ -336,6 +339,7 @@ export class CastleScene {
     }
     const sprite = new Sprite(frames.sit?.[0] ?? Texture.EMPTY);
     sprite.anchor.set(sheet.anchorX / sheet.frameWidth, sheet.anchorY / sheet.frameHeight);
+    sprite.eventMode = "none";
     this.sortLayer.addChild(sprite);
     const label = this.makeLabel();
     label.text = "O Rei";
@@ -618,6 +622,8 @@ export class CastleScene {
     if (!t || !this.tiles) return null;
     const s = new Sprite(t);
     s.anchor.set(this.tiles.ax / this.tiles.cw, this.tiles.ay / this.tiles.ch);
+    // Scenery never takes a click: a wall or a lamp in front of a soul must not swallow it.
+    s.eventMode = "none";
     const c = isoOfTile({ x, y });
     s.position.set(c.x, c.y);
     s.zIndex = c.y + bias;
@@ -697,6 +703,7 @@ export class CastleScene {
       tex.source.scaleMode = "nearest";
       layer.visible = false;
       const s = new Sprite(tex);
+      s.eventMode = "none";
       s.position.set(bounds.x, bounds.y);
       this.root.addChildAt(s, i);
       this.baked.push(s);
@@ -829,6 +836,8 @@ export class CastleScene {
       sleeper.anchor.set(ax, ay);
       zz.anchor.set(ax, ay);
     }
+    // Only the bed itself, not the whole (mostly empty) tile cell, or it would cover the next bed.
+    sleeper.hitArea = new Rectangle(-14, -22, 28, 28);
     sleeper.eventMode = "static";
     sleeper.cursor = "pointer";
     sleeper.on("pointertap", (e) => {
@@ -959,6 +968,7 @@ export class CastleScene {
     for (const e of this.encounters) {
       if (!active.has(e.id) || this.monsters.has(e.id)) continue;
       const m = new MonsterView(e);
+      m.eventMode = "none";
       this.sortLayer.addChild(m);
       this.monsters.set(e.id, m);
       void m.play("attack", 0.75);
@@ -1224,6 +1234,7 @@ export class CastleScene {
     const fight = this.fighting(actor, now) && !hasRealMonster;
     if (fight && !actor.foe) {
       actor.foe = new MonsterView({ monster: "bug_monster" } as Encounter, "task_shade");
+      actor.foe.eventMode = "none";
       this.sortLayer.addChild(actor.foe);
       void actor.foe.play("attack", 1);
       actor.facing = 1;
@@ -1240,9 +1251,29 @@ export class CastleScene {
     }
   }
 
+  /** What a soul is visibly doing in the castle right now, for its profile. */
+  describe(id: string): string | null {
+    const a = this.actors.get(id);
+    if (!a) return null;
+    const now = Date.now();
+    if (now < a.hurtUntil) return "Levando uma bronca";
+    if (a.talking) return "Conversando com outro tripulante";
+    if (a.idle || a.leavingSince !== null) {
+      if (a.phase === "sleeping") return "Dormindo no alojamento";
+      if (a.phase === "walking") return a.destKey === "bed" || a.destKey === "floor-nap" ? "Indo dormir" : "Passeando pelo castelo";
+      const t = tileOf(a.pos);
+      const r = roomOf(this.map, t);
+      return r && r !== "hall" ? `Descansando: ${ROOM_LABEL[r]}` : "Descansando no pátio";
+    }
+    if (a.phase === "walking") return "A caminho da arena";
+    if (this.fighting(a, now)) return "Enfrentando a tarefa na arena";
+    return `Na arena: ${STATE_LABEL[visualFor(a.agent, now).state].toLowerCase()}`;
+  }
+
   private makeRing(): Graphics {
     const g = new Graphics().ellipse(0, 0, 13, 6.5).stroke({ width: 1.5, color: 0xd7b45a }).ellipse(0, 0, 9, 4.5).stroke({ width: 1, color: 0x7cf2c2, alpha: 0.8 });
     g.visible = false;
+    g.eventMode = "none";
     this.root.addChildAt(g, this.root.getChildIndex(this.sortLayer));
     return g;
   }
