@@ -10,7 +10,9 @@ use serde::Serialize;
 use tauri::State;
 
 use super::{conn, err, CmdResult};
+use crate::engine_host::EngineMsg;
 use crate::state::AppState;
+use ids_core::model::AgentSpecialty;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -50,6 +52,29 @@ pub fn get_agent_detail(state: State<'_, AppState>, id: String) -> CmdResult<Opt
 #[tauri::command]
 pub fn list_agents(state: State<'_, AppState>, filter: Filter) -> CmdResult<Vec<Agent>> {
     q::agents(&*conn(&state)?, &filter).map_err(err)
+}
+
+const SPECIALTIES: [&str; 8] = ["architect", "developer", "researcher", "tester", "reviewer", "debugger", "documentation", "general"];
+
+/// Change an agent's function. Applied by the engine (it owns the live agents);
+/// the result arrives as an `ids://updates` agent update.
+#[tauri::command]
+pub fn set_agent_specialty(state: State<'_, AppState>, id: String, specialty: String) -> CmdResult<()> {
+    if id.is_empty() || id.len() > 300 || !SPECIALTIES.contains(&specialty.as_str()) {
+        return Err("agente ou função inválida".into());
+    }
+    state.send(EngineMsg::SetAgentSpecialty { id, specialty: AgentSpecialty::parse(&specialty) });
+    Ok(())
+}
+
+/// Remove an agent from the crew. Its events and usage stay in the history.
+#[tauri::command]
+pub fn delete_agent(state: State<'_, AppState>, id: String) -> CmdResult<()> {
+    if id.is_empty() || id.len() > 300 {
+        return Err("agente inválido".into());
+    }
+    state.send(EngineMsg::DeleteAgent { id });
+    Ok(())
 }
 
 #[tauri::command]

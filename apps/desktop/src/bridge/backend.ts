@@ -14,6 +14,7 @@ import type {
   SystemInfo,
   Update,
   Agent,
+  Specialty,
 } from "@ids/shared";
 
 /**
@@ -26,6 +27,10 @@ export interface Backend {
   getSnapshot(): Promise<Snapshot>;
   getAgentDetail(id: string): Promise<AgentDetail | null>;
   listAgents(filter: Filter): Promise<Agent[]>;
+  /** Change an agent's function; the change arrives through onUpdates. */
+  setAgentSpecialty(id: string, specialty: Specialty): Promise<void>;
+  /** Remove an agent from the crew; the removal arrives through onUpdates. */
+  deleteAgent(id: string): Promise<void>;
   listSessions(filter: Filter): Promise<SessionSummary[]>;
   getSessionDetail(id: string): Promise<SessionDetail | null>;
   listEvents(filter: Filter): Promise<EventRecord[]>;

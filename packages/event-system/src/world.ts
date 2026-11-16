@@ -73,6 +73,10 @@ export function applyUpdates(world: World, updates: readonly Update[], now: numb
         }
         break;
       }
+      case "agentRemoved":
+        delete agents[u.id];
+        recent = recent.filter((r) => r.id !== u.id);
+        break;
       case "session":
         sessions[u.session.id] = u.session;
         break;

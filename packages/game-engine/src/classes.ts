@@ -29,6 +29,7 @@ export const CLASSES: Record<string, CharacterClass> = {
   hollow_hunter: { id: "hollow_hunter", label: "Caçador do Vazio", description: "Depuração e investigação de erros.", sprite: "hollow_hunter", palette: { cloak: "#5a2a3a", trim: "#ff7a8a", glow: "#ff9fb0" } },
   ink_scribe: { id: "ink_scribe", label: "Escriba de Tinta", description: "Documentação.", sprite: "ink_scribe", palette: { cloak: "#33405a", trim: "#c9d6ff", glow: "#e2e9ff" } },
   tide_architect: { id: "tide_architect", label: "Arquiteto das Marés", description: "Arquitetura e planejamento.", sprite: "tide_architect", palette: { cloak: "#1f4f63", trim: "#7fd3e6", glow: "#b5f1ff" } },
+  shade_lancer: { id: "shade_lancer", label: "Lanceira das Sombras", description: "Depuração: caça erros com a lança espectral.", sprite: "shade_lancer", palette: { cloak: "#12303a", trim: "#2f8f8f", glow: "#6fe6e0" } },
   wisp: { id: "wisp", label: "Fogo-Fátuo", description: "Agente sem especialidade identificada.", sprite: "wisp", palette: { cloak: "#2b3f45", trim: "#8fb9b1", glow: "#b8fff0" } },
 };
 
@@ -38,7 +39,7 @@ const BY_SPECIALTY: Record<Specialty, string> = {
   researcher: "wraith_scholar",
   tester: "mist_alchemist",
   reviewer: "bone_sentinel",
-  debugger: "hollow_hunter",
+  debugger: "shade_lancer",
   documentation: "ink_scribe",
   general: "wisp",
 };

@@ -193,6 +193,8 @@ pub fn run() {
             commands::data::get_snapshot,
             commands::data::get_agent_detail,
             commands::data::list_agents,
+            commands::data::set_agent_specialty,
+            commands::data::delete_agent,
             commands::data::list_sessions,
             commands::data::get_session_detail,
             commands::data::list_events,

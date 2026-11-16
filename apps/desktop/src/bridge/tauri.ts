@@ -10,6 +10,8 @@ export function createTauriBackend(): Backend {
     getSnapshot: () => invoke("get_snapshot"),
     getAgentDetail: (id) => invoke("get_agent_detail", { id }),
     listAgents: (filter) => invoke("list_agents", { filter }),
+    setAgentSpecialty: (id, specialty) => invoke("set_agent_specialty", { id, specialty }),
+    deleteAgent: (id) => invoke("delete_agent", { id }),
     listSessions: (filter) => invoke("list_sessions", { filter }),
     getSessionDetail: (id) => invoke("get_session_detail", { id }),
     listEvents: (filter) => invoke("list_events", { filter }),

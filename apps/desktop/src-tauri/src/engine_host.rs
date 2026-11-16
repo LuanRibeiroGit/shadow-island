@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use ids_core::engine::{Engine, EngineConfig, Update};
 use ids_core::event::{parse_envelope, Envelope};
+use ids_core::model::AgentSpecialty;
 use tauri::{AppHandle, Emitter};
 
 use crate::collector::CollectorStats;
@@ -21,6 +22,10 @@ pub enum EngineMsg {
     Replay(Vec<Vec<u8>>),
     Reconfigure(EngineConfig),
     Prune { before_ms: i64 },
+    /// The user changed an agent's function in the crew page.
+    SetAgentSpecialty { id: String, specialty: AgentSpecialty },
+    /// The user removed an agent in the crew page.
+    DeleteAgent { id: String },
     Shutdown,
 }
 
@@ -60,6 +65,15 @@ fn run(app: AppHandle, mut engine: Engine, rx: Receiver<EngineMsg>, stats: Arc<C
                     }
                 }
                 EngineMsg::Reconfigure(cfg) => *engine.config_mut() = cfg,
+                EngineMsg::SetAgentSpecialty { id, specialty } => match engine.set_agent_specialty(&id, specialty) {
+                    Ok(Some(agent)) => batch.push(Update::Agent { agent }),
+                    Ok(None) => {}
+                    Err(e) => log::warn!("set agent specialty failed: {e}"),
+                },
+                EngineMsg::DeleteAgent { id } => match engine.delete_agent(&id) {
+                    Ok(_) => batch.push(Update::AgentRemoved { id }),
+                    Err(e) => log::warn!("delete agent failed: {e}"),
+                },
                 EngineMsg::Prune { before_ms } => match ids_core::db::queries::prune(engine.conn(), before_ms) {
                     Ok(n) if n > 0 => log::info!("retention: removed {n} old sessions"),
                     Ok(_) => {}

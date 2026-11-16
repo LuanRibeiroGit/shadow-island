@@ -323,6 +323,44 @@ def build_characters(manifest):
         }
 
 
+# Hand-drawn character sheets supplied by the project owner (scripts/art/characters).
+# Each is an 8x8 grid of 32x32 frames; here its frames are laid out in the same
+# animation rows the app expects. No palette: these keep their own colours.
+CUSTOM_CHARACTERS = {
+    # id: {animation: (source row, first frame, frames, fps, loop)}
+    "shade_lancer": {
+        "idle": (0, 0, 8, 6, True),
+        "move": (1, 0, 8, 10, True),
+        "work": (5, 0, 8, 6, True),
+        "read": (5, 0, 8, 4, True),
+        "cast": (4, 0, 4, 6, True),
+        "attack": (3, 0, 8, 10, True),
+        "wait": (7, 0, 6, 4, True),
+        "cheer": (4, 4, 4, 6, True),
+        "hurt": (7, 5, 3, 6, False),
+    },
+}
+
+
+def build_custom_characters(manifest):
+    src_dir = Path(__file__).parent / "art" / "characters"
+    for cls_id, layout in CUSTOM_CHARACTERS.items():
+        src_path = src_dir / f"{cls_id}.png"
+        if not src_path.exists():
+            continue
+        src = Image.open(src_path).convert("RGBA")
+        size = 32
+        sheet = Image.new("RGBA", (size * 8, size * len(layout)), (0, 0, 0, 0))
+        animations = {}
+        for row, (name, (srow, first, frames, fps, loop)) in enumerate(layout.items()):
+            for f in range(frames):
+                x = (first + f) * size
+                sheet.paste(src.crop((x, srow * size, x + size, srow * size + size)), (f * size, row * size))
+            animations[name] = {"row": row, "frames": frames, "fps": fps, "loop": loop}
+        sheet.save(ASSETS / "characters" / f"{cls_id}.png")
+        manifest["characters"][cls_id] = {"image": f"characters/{cls_id}.png", "frameWidth": size, "frameHeight": size, "anchorY": 31, "animations": animations}
+
+
 # --------------------------------------------------------------- monsters
 
 MONSTERS = {
@@ -1043,6 +1081,7 @@ def main():
     random.seed(1)
     manifest = {"version": 1, "characters": {}, "monsters": {}, "effects": {}, "environments": {}, "ui": {"appIcon": "ui/app-icon-32.png"}}
     build_characters(manifest)
+    build_custom_characters(manifest)
     build_monsters(manifest)
     build_effects(manifest)
     build_environment(manifest)

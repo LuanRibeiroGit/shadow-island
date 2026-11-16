@@ -69,6 +69,8 @@ pub enum Update {
     Encounter { encounter: Encounter },
     Event { event: EventRecord },
     Usage { session_id: String },
+    /// The user removed an agent from the crew.
+    AgentRemoved { id: String },
 }
 
 #[derive(Debug, Default)]
@@ -120,6 +122,31 @@ impl Engine {
 
     pub fn config_mut(&mut self) -> &mut EngineConfig {
         &mut self.cfg
+    }
+
+    /// The user changed an agent's function. Returns the updated agent, or `None`
+    /// when no such agent exists.
+    pub fn set_agent_specialty(&mut self, id: &str, specialty: AgentSpecialty) -> CoreResult<Option<Agent>> {
+        let at = now_ms();
+        if let Some(a) = self.agents.get_mut(id) {
+            a.specialty = specialty;
+            a.updated_at = a.updated_at.max(at);
+        }
+        self.conn.execute(
+            "UPDATE agents SET specialty = ?2, updated_at = MAX(updated_at, ?3) WHERE id = ?1",
+            params![id, specialty.as_str(), at],
+        )?;
+        Ok(self
+            .conn
+            .query_row(&format!("SELECT {} FROM agents WHERE id = ?1", agents::COLS), params![id], agents::row_to_agent)
+            .optional()?)
+    }
+
+    /// The user removed an agent: its row and per-agent statistics go away; events
+    /// and usage it produced stay in the session history. Returns whether it existed.
+    pub fn delete_agent(&mut self, id: &str) -> CoreResult<bool> {
+        self.agents.forget(id);
+        Ok(self.conn.execute("DELETE FROM agents WHERE id = ?1", params![id])? > 0)
     }
 
     pub fn active_agents(&self) -> Vec<Agent> {

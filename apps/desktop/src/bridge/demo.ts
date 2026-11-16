@@ -5,7 +5,7 @@
  * fixtures (see crates/ids-core/examples/export_demo.rs), so the UI can be
  * exercised in a plain browser without a Claude Code session.
  */
-import type { Dashboard, IntegrationInfo, SessionDetail, Snapshot, SystemInfo, Update, AgentDetail } from "@ids/shared";
+import type { Dashboard, IntegrationInfo, SessionDetail, Snapshot, Specialty, SystemInfo, Update, AgentDetail } from "@ids/shared";
 import type { Backend } from "./backend";
 import data from "./demo-data.json";
 
@@ -93,13 +93,24 @@ export function createDemoBackend(): Backend {
     events: ["SessionStart", "SessionEnd", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure", "SubagentStart", "SubagentStop", "Stop", "StopFailure", "Notification", "TaskCreated", "TaskCompleted"],
   };
 
+  const removedAgents = new Set<string>();
+  const specialties = new Map<string, Specialty>();
   const reject = (what: string) => Promise.reject(new Error(`${what} não está disponível no modo demonstração.`));
 
   return {
     kind: "demo",
     getSnapshot: async () => ({ agents: [], recentAgents: [], sessions: [], missions: [], encounters: [], events: [], now: Date.now() }),
     getAgentDetail: async (id) => S(doc.agentDetails.find((d) => d.agent.id === id) ?? null),
-    listAgents: async () => S(doc.agents),
+    listAgents: async () => S(doc.agents.filter((a) => !removedAgents.has(a.id)).map((a) => ({ ...a, specialty: specialties.get(a.id) ?? a.specialty }))),
+    setAgentSpecialty: async (id, specialty) => {
+      specialties.set(id, specialty);
+      const a = doc.agents.find((x) => x.id === id);
+      if (a) listeners.forEach((l) => l([{ type: "agent", agent: { ...a, specialty, updatedAt: Date.now() } }]));
+    },
+    deleteAgent: async (id) => {
+      removedAgents.add(id);
+      listeners.forEach((l) => l([{ type: "agentRemoved", id }]));
+    },
     listSessions: async (f) => S(doc.sessions.filter((s) => !f.projectId || s.session.projectId === f.projectId)),
     getSessionDetail: async (id) => S(doc.sessionDetails.find((d) => d.summary.session.id === id) ?? null),
     listEvents: async (f) =>

@@ -140,7 +140,9 @@ export type Update =
   | { type: "mission"; mission: Mission }
   | { type: "encounter"; encounter: Encounter }
   | { type: "event"; event: EventRecord }
-  | { type: "usage"; sessionId: string };
+  | { type: "usage"; sessionId: string }
+  /** The user removed an agent from the crew. */
+  | { type: "agentRemoved"; id: string };
 
 export interface TokenTotals {
   input: number;

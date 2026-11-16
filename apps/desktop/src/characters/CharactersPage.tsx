@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { SPECIALTIES, type Agent, type Specialty } from "@ids/shared";
 import { CLASSES, SPECIALTY_LABEL, resolveCharacter, type CharacterCustomization, type Palette } from "@ids/game-engine";
 import { useCharacters } from "../stores/characters";
@@ -6,6 +6,7 @@ import { useSettings } from "../stores/settings";
 import { useWorld } from "../stores/world";
 import { SpriteCanvas } from "../components/Portrait";
 import { Select } from "../components/Filters";
+import { backend } from "../bridge/backend";
 
 const DEFAULT_CLASS: Record<Specialty, string> = {
   architect: "tide_architect",
@@ -13,7 +14,7 @@ const DEFAULT_CLASS: Record<Specialty, string> = {
   researcher: "wraith_scholar",
   tester: "mist_alchemist",
   reviewer: "bone_sentinel",
-  debugger: "hollow_hunter",
+  debugger: "shade_lancer",
   documentation: "ink_scribe",
   general: "wisp",
 };
@@ -30,6 +31,9 @@ const PREVIEW_ANIMS: { value: string; label: string }[] = [
   { value: "hurt", label: "Erro" },
 ];
 
+/** Agent cards drawn at a time (each one animates a sprite). */
+const PAGE = 24;
+
 /**
  * Character customization. Saved per specialty ("specialty:tester") or per agent
  * ("agent:<id>"). The agent's real specialty decides which entry applies.
@@ -42,7 +46,29 @@ export function CharactersPage() {
     const t = setInterval(() => setAnim((a) => a + 1), 220);
     return () => clearInterval(t);
   }, []);
-  const agents = Object.values(world.agents).concat(world.recentAgents.filter((a) => !world.agents[a.id])).slice(0, 24);
+  // Every agent ever recorded, not only the ones in memory. Live agents come from
+  // the world (always fresh); the rest is read from the database.
+  const [stored, setStored] = useState<Agent[]>([]);
+  const [shown, setShown] = useState(PAGE);
+  const liveKey = Object.values(world.agents).concat(world.recentAgents).map((a) => `${a.id}:${a.specialty}:${a.endedAt ?? ""}`).join("|");
+  const reload = useCallback(() => {
+    void backend()
+      .then((b) => b.listAgents({ limit: 1000 }))
+      .then(setStored)
+      .catch(() => {});
+  }, []);
+  useEffect(reload, [reload, liveKey]);
+  const agents = useMemo(() => {
+    const byId = new Map<string, Agent>();
+    for (const a of stored) byId.set(a.id, a);
+    for (const a of world.recentAgents) byId.set(a.id, a);
+    for (const a of Object.values(world.agents)) byId.set(a.id, a);
+    return [...byId.values()].sort((a, b) => Number(a.endedAt !== null) - Number(b.endedAt !== null) || b.startedAt - a.startedAt);
+  }, [stored, world.agents, world.recentAgents]);
+  const removed = (id: string) => {
+    setStored((s) => s.filter((a) => a.id !== id));
+    setTimeout(reload, 400);
+  };
 
   return (
     <div className="page">
@@ -56,14 +82,21 @@ export function CharactersPage() {
         <CustomCard storeKey="specialty:main" title="Agente principal" defaultClass="lantern_keeper" value={custom["specialty:main"] ?? {}} frame={anim} nameEditable note="Aplicado aos agentes principais de cada sessão. O nome vale para todas as sessões." />
       </div>
 
-      <h3 style={{ marginTop: 22 }}>Agentes conhecidos</h3>
+      <h3 style={{ marginTop: 22 }}>Todos os agentes ({agents.length})</h3>
+      <p className="sub">Aqui você troca o nome, a função e o visual de cada agente, ou o exclui. Excluir tira o agente da tripulação; os eventos e o consumo que ele gerou continuam no histórico.</p>
       {agents.length === 0 ? (
         <p className="faint">Nenhum agente registrado ainda. Eles aparecem aqui quando uma sessão do Claude Code começa.</p>
       ) : (
         <div className="char-grid">
-          {agents.map((a) => (
-            <AgentCustomCard key={a.id} agent={a} custom={custom} frame={anim} />
+          {agents.slice(0, shown).map((a) => (
+            <AgentCustomCard key={a.id} agent={a} custom={custom} frame={anim} onRemoved={removed} />
           ))}
+        </div>
+      )}
+      {agents.length > shown && (
+        <div className="row" style={{ marginTop: 12 }}>
+          <button className="btn" onClick={() => setShown((n) => n + PAGE)}>Mostrar mais ({agents.length - shown} restantes)</button>
+          <button className="btn" onClick={() => setShown(agents.length)}>Mostrar todos</button>
         </div>
       )}
 
@@ -72,7 +105,7 @@ export function CharactersPage() {
   );
 }
 
-function CustomCard({ storeKey, title, defaultClass, value, frame, note, nameEditable }: { storeKey: string; title: string; defaultClass: string; value: CharacterCustomization; frame: number; note?: string; nameEditable?: boolean }) {
+function CustomCard({ storeKey, title, defaultClass, value, frame, note, nameEditable, children }: { storeKey: string; title: string; defaultClass: string; value: CharacterCustomization; frame: number; note?: string; nameEditable?: boolean; children?: ReactNode }) {
   const save = useCharacters((s) => s.save);
   const cls = CLASSES[value.classId ?? defaultClass] ?? CLASSES.wisp!;
   const palette: Palette = { ...cls.palette, ...value.palette };
@@ -115,13 +148,28 @@ function CustomCard({ storeKey, title, defaultClass, value, frame, note, nameEdi
       <label className="row" style={{ gap: 6, fontSize: 13 }}>
         <input type="checkbox" checked={value.hidden ?? false} onChange={(e) => set({ hidden: e.target.checked || undefined })} /> Ocultar na área de trabalho
       </label>
+      {children}
     </section>
   );
 }
 
-function AgentCustomCard({ agent, custom, frame }: { agent: Agent; custom: Record<string, CharacterCustomization>; frame: number }) {
+function AgentCustomCard({ agent, custom, frame, onRemoved }: { agent: Agent; custom: Record<string, CharacterCustomization>; frame: number; onRemoved: (id: string) => void }) {
   const resolved = resolveCharacter(agent, custom);
   const own = custom[`agent:${agent.id}`] ?? {};
+  const [confirming, setConfirming] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const fail = (e: unknown) => setError(e instanceof Error ? e.message : String(e));
+  const setSpecialty = (s: Specialty) => {
+    setError(null);
+    void backend().then((b) => b.setAgentSpecialty(agent.id, s)).catch(fail);
+  };
+  const remove = () => {
+    setError(null);
+    void backend()
+      .then((b) => b.deleteAgent(agent.id))
+      .then(() => onRemoved(agent.id))
+      .catch(fail);
+  };
   return (
     <CustomCard
       storeKey={`agent:${agent.id}`}
@@ -131,7 +179,21 @@ function AgentCustomCard({ agent, custom, frame }: { agent: Agent; custom: Recor
       frame={frame}
       nameEditable
       note={`${agent.isMain ? "Principal" : agent.agentType ?? "subagente"} · ${agent.endedAt ? "encerrado" : "ativo"}`}
-    />
+    >
+      <Select label="Função" value={agent.specialty} onChange={setSpecialty} options={SPECIALTIES.map((s) => ({ value: s, label: SPECIALTY_LABEL[s] }))} />
+      <div className="row" style={{ gap: 8 }}>
+        {confirming ? (
+          <>
+            <button className="btn small danger" onClick={remove}>Confirmar exclusão</button>
+            <button className="btn small" onClick={() => setConfirming(false)}>Cancelar</button>
+          </>
+        ) : (
+          <button className="btn small" aria-label={`Excluir ${resolved.name}`} onClick={() => setConfirming(true)}>Excluir agente</button>
+        )}
+      </div>
+      {!agent.endedAt && confirming && <div className="faint" style={{ fontSize: 11 }}>Este agente está ativo. Se ele voltar a trabalhar no Claude Code, reaparece.</div>}
+      {error && <div className="faint" style={{ fontSize: 11 }}>{error}</div>}
+    </CustomCard>
   );
 }
 

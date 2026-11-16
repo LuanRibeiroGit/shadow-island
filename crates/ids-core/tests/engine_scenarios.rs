@@ -253,3 +253,23 @@ fn read_queries_over_a_real_scenario() {
     assert_eq!(queries::category_distribution(c, 0).unwrap().iter().map(|d| d.count).sum::<i64>(), 7);
     assert_eq!(queries::projects(c).unwrap().len(), 1);
 }
+
+#[test]
+fn user_can_change_an_agents_function_and_remove_it() {
+    let mut e = Engine::in_memory(EngineConfig::default()).unwrap();
+    run(&mut e, &fixture("session-multiagent.jsonl"));
+    let id: String = q(&e, "SELECT id FROM agents WHERE agent_id = 'ag-dev-1'");
+    let events_before: i64 = q(&e, "SELECT COUNT(*) FROM events");
+
+    let changed = e.set_agent_specialty(&id, AgentSpecialty::Developer).unwrap().expect("agent exists");
+    assert_eq!(changed.specialty, AgentSpecialty::Developer);
+    let spec: String = q(&e, "SELECT specialty FROM agents WHERE agent_id = 'ag-dev-1'");
+    assert_eq!(spec, "developer");
+    assert!(e.set_agent_specialty("nope", AgentSpecialty::Tester).unwrap().is_none());
+
+    assert!(e.delete_agent(&id).unwrap());
+    assert!(!e.delete_agent(&id).unwrap());
+    assert_eq!(q::<i64>(&e, "SELECT COUNT(*) FROM agents"), 3);
+    // What the agent did stays in the history.
+    assert_eq!(q::<i64>(&e, "SELECT COUNT(*) FROM events"), events_before);
+}
