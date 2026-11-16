@@ -356,9 +356,12 @@ export class CastleScene {
       if (now > k.until) nextLeg();
     } else {
       const s = stepAlong(k.pos, k.path, dt, WALK_SPEED * 0.8);
+      // Face where he moves on SCREEN: in the diagonal view a step along the
+      // grid's y axis goes left, so the grid dx alone would turn him backwards.
+      const sdx = toIso(s).x - toIso(k.pos).x;
       k.pos = { x: s.x, y: s.y };
       k.path = s.path;
-      if (s.dx !== 0) k.facing = s.dx > 0 ? 1 : -1;
+      if (Math.abs(sdx) > 0.01) k.facing = sdx > 0 ? 1 : -1;
       if (k.nextSay === 0) k.nextSay = now + rnd(3000, 9000);
       if (now > k.nextSay && k.mode === "strolling") {
         this.kingSay(pick(KING_LINES), now);
@@ -893,9 +896,10 @@ export class CastleScene {
     for (const actor of [...this.actors.values()]) {
       if (actor.phase === "walking") {
         const s = stepAlong(actor.pos, actor.path, dt, WALK_SPEED);
+        const sdx = toIso(s).x - toIso(actor.pos).x;
         actor.pos = { x: s.x, y: s.y };
         actor.path = s.path;
-        if (s.dx !== 0) actor.facing = s.dx > 0 ? 1 : -1;
+        if (Math.abs(sdx) > 0.01) actor.facing = sdx > 0 ? 1 : -1;
         if (actor.path.length === 0) {
           actor.phase = actor.destKey === "bed" ? "sleeping" : "working";
           actor.idleUntil = now + (actor.phase === "sleeping" ? rnd(15000, 40000) : rnd(1500, 5000));
