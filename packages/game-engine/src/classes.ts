@@ -82,7 +82,9 @@ export function resolveCharacter(agent: Agent, custom: Record<string, CharacterC
   const defaultClass = agent.isMain ? "lantern_keeper" : BY_SPECIALTY[agent.specialty];
   const cls = CLASSES[c.classId ?? ""] ?? CLASSES[defaultClass] ?? CLASSES.wisp!;
   return {
-    name: byAgent.name?.trim() || agent.name,
+    // A name given to one agent wins; a name given to its kind (e.g. "Agente principal")
+    // carries over to every new session.
+    name: byAgent.name?.trim() || bySpecialty.name?.trim() || agent.name,
     cls,
     palette: { ...cls.palette, ...c.palette },
     weapon: c.weapon ?? null,

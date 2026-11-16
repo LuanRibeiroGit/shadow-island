@@ -51,9 +51,9 @@ export function CharactersPage() {
       <h3>Por especialidade</h3>
       <div className="char-grid">
         {SPECIALTIES.map((s) => (
-          <CustomCard key={s} storeKey={`specialty:${s}`} title={SPECIALTY_LABEL[s]} defaultClass={DEFAULT_CLASS[s]} value={custom[`specialty:${s}`] ?? {}} frame={anim} />
+          <CustomCard key={s} storeKey={`specialty:${s}`} title={SPECIALTY_LABEL[s]} defaultClass={DEFAULT_CLASS[s]} value={custom[`specialty:${s}`] ?? {}} frame={anim} nameEditable />
         ))}
-        <CustomCard storeKey="specialty:main" title="Agente principal" defaultClass="lantern_keeper" value={custom["specialty:main"] ?? {}} frame={anim} note="Aplicado aos agentes principais de cada sessão." />
+        <CustomCard storeKey="specialty:main" title="Agente principal" defaultClass="lantern_keeper" value={custom["specialty:main"] ?? {}} frame={anim} nameEditable note="Aplicado aos agentes principais de cada sessão. O nome vale para todas as sessões." />
       </div>
 
       <h3 style={{ marginTop: 22 }}>Agentes conhecidos</h3>
@@ -92,7 +92,7 @@ function CustomCard({ storeKey, title, defaultClass, value, frame, note, nameEdi
       {nameEditable && (
         <label className="field">
           <span>Nome</span>
-          <input className="input" defaultValue={value.name ?? ""} placeholder="Nome automático" maxLength={40} onBlur={(e) => set({ name: e.target.value.trim() || undefined })} />
+          <input className="input" aria-label={`Nome de ${title}`} defaultValue={value.name ?? ""} placeholder="Nome automático" maxLength={40} onBlur={(e) => set({ name: e.target.value.trim() || undefined })} />
         </label>
       )}
       <Select label="Classe" value={value.classId ?? ""} onChange={(v) => set({ classId: v || undefined })} options={[{ value: "", label: `Padrão (${CLASSES[defaultClass]?.label ?? "?"})` }, ...Object.values(CLASSES).map((c) => ({ value: c.id, label: c.label }))]} />

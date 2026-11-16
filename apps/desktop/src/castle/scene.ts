@@ -89,6 +89,9 @@ interface Actor {
   idleUntil: number;
   strollLeft: number;
   bubble: Container | null;
+  /** Name plate above the head. */
+  label: Text;
+  labelText: string;
   bubbleUntil: number;
   nextSay: number;
 }
@@ -566,6 +569,8 @@ export class CastleScene {
       idleUntil: Date.now() + rnd(3000, 12000),
       strollLeft: 0,
       bubble: null,
+      label: this.makeLabel(),
+      labelText: "",
       bubbleUntil: 0,
       nextSay: 0,
     };
@@ -603,6 +608,17 @@ export class CastleScene {
     return visualFor(actor.agent, now).animation;
   }
 
+  private makeLabel(): Text {
+    const t = new Text({
+      text: "",
+      style: { fontFamily: "Inter, Segoe UI, Noto Sans, sans-serif", fontSize: 11, fontWeight: "600", fill: 0xe9fff6, stroke: { color: 0x050b0d, width: 3 } },
+      resolution: 2,
+    });
+    t.anchor.set(0.5, 1);
+    this.fxLayer.addChild(t);
+    return t;
+  }
+
   private place(actor: Actor) {
     const { view, sleeper, zz } = actor;
     const sleeping = actor.phase === "sleeping" && actor.bed !== null;
@@ -613,6 +629,16 @@ export class CastleScene {
     const sp = toIso(actor.pos);
     view.position.set(Math.round(sp.x), Math.round(sp.y));
     view.zIndex = sp.y + 0.5;
+    // Name above the head (or above the bed), constant size on screen.
+    const { label } = actor;
+    if (actor.labelText !== ch.name) {
+      actor.labelText = ch.name;
+      label.text = ch.name;
+    }
+    label.visible = !ch.hidden;
+    label.scale.set(1 / this.zoom);
+    const head = sleeping && actor.bed ? isoOfTile(actor.bed) : sp;
+    label.position.set(head.x, head.y - (sleeping ? 22 : 36 * CHAR_SCALE));
     if (sleeping && actor.bed) {
       const b = isoOfTile(actor.bed);
       sleeper.position.set(b.x, b.y);
@@ -754,7 +780,7 @@ export class CastleScene {
     // Constant size on screen whatever the zoom.
     const sp = toIso(actor.pos);
     actor.bubble.scale.set(1 / this.zoom);
-    actor.bubble.position.set(sp.x, sp.y - 24 * CHAR_SCALE - 8 / this.zoom);
+    actor.bubble.position.set(sp.x, sp.y - 36 * CHAR_SCALE - 20 / this.zoom);
   }
 
   private remove(actor: Actor) {
@@ -764,6 +790,7 @@ export class CastleScene {
     actor.view.destroy({ children: true });
     actor.sleeper.destroy();
     actor.zz.destroy();
+    actor.label.destroy();
     this.actors.delete(actor.id);
     this.beds.release(actor.id);
   }
