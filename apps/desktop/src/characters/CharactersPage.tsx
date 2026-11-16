@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { SPECIALTIES, type Agent, type Specialty } from "@ids/shared";
-import { CLASSES, SPECIALTY_LABEL, resolveCharacter, type CharacterCustomization, type Palette } from "@ids/game-engine";
+import { CLASSES, CREW_ROLES, CREW_ROLE_LABEL, SPECIALTY_LABEL, crewKey, crewRoster, newCrewId, resolveCharacter, type CharacterCustomization, type CrewMember, type CrewRole, type Palette } from "@ids/game-engine";
 import { useCharacters } from "../stores/characters";
 import { useSettings } from "../stores/settings";
 import { useWorld } from "../stores/world";
@@ -74,7 +74,9 @@ export function CharactersPage() {
     <div className="page">
       <h2>Personagens</h2>
       <p className="sub">A classe padrão vem da especialidade real do agente. Você pode trocar classe, cores, tamanho e visibilidade por especialidade, ou só para um agente.</p>
-      <h3>Por especialidade</h3>
+      <CrewSection custom={custom} frame={anim} />
+
+      <h3 style={{ marginTop: 22 }}>Por especialidade</h3>
       <div className="char-grid">
         {SPECIALTIES.map((s) => (
           <CustomCard key={s} storeKey={`specialty:${s}`} title={SPECIALTY_LABEL[s]} defaultClass={DEFAULT_CLASS[s]} value={custom[`specialty:${s}`] ?? {}} frame={anim} nameEditable />
@@ -82,8 +84,8 @@ export function CharactersPage() {
         <CustomCard storeKey="specialty:main" title="Agente principal" defaultClass="lantern_keeper" value={custom["specialty:main"] ?? {}} frame={anim} nameEditable note="Aplicado aos agentes principais de cada sessão. O nome vale para todas as sessões." />
       </div>
 
-      <h3 style={{ marginTop: 22 }}>Todos os agentes ({agents.length})</h3>
-      <p className="sub">Aqui você troca o nome, a função e o visual de cada agente, ou o exclui. Excluir tira o agente da tripulação; os eventos e o consumo que ele gerou continuam no histórico.</p>
+      <h3 style={{ marginTop: 22 }}>Agentes das sessões do Claude Code ({agents.length})</h3>
+      <p className="sub">Um registro por sessão ou subagente real. Aqui você troca o nome, a função e o visual de cada um, ou o exclui. Excluir tira o agente da tripulação; os eventos e o consumo que ele gerou continuam no histórico.</p>
       {agents.length === 0 ? (
         <p className="faint">Nenhum agente registrado ainda. Eles aparecem aqui quando uma sessão do Claude Code começa.</p>
       ) : (
@@ -102,6 +104,65 @@ export function CharactersPage() {
 
       <SpecialtyOverrides />
     </div>
+  );
+}
+
+const CREW_DEFAULT_CLASS: Record<CrewRole, string> = { main: "lantern_keeper", ...DEFAULT_CLASS };
+
+/**
+ * The castle's standing crew: they live in the castle all the time, and take the
+ * work of real agents of their function. Editable, removable, and you can add more.
+ */
+function CrewSection({ custom, frame }: { custom: Record<string, CharacterCustomization>; frame: number }) {
+  const save = useCharacters((s) => s.save);
+  const roster = crewRoster(custom);
+  const [role, setRole] = useState<CrewRole>("developer");
+  const add = () => void save(crewKey(newCrewId(custom)), { role });
+  const restore = () => {
+    for (const r of CREW_ROLES) {
+      const key = crewKey(`crew:${r}`);
+      const c = custom[key];
+      if (c?.deleted) void save(key, { ...c, deleted: undefined });
+    }
+  };
+  const anyDeleted = CREW_ROLES.some((r) => custom[crewKey(`crew:${r}`)]?.deleted);
+  return (
+    <>
+      <h3>Tripulação do castelo ({roster.length})</h3>
+      <p className="sub">Estes tripulantes moram no castelo e aparecem sempre: dormem, passeiam e conversam. Quando um agente real do Claude Code com a mesma função começa a trabalhar, o tripulante assume o trabalho dele. Parado, um tripulante não gera atividade, tokens nem custo.</p>
+      {roster.length === 0 && <p className="faint">Nenhum tripulante. Adicione um abaixo.</p>}
+      <div className="char-grid">
+        {roster.map((m) => (
+          <CrewCard key={m.id} member={m} value={custom[crewKey(m.id)] ?? {}} frame={frame} />
+        ))}
+      </div>
+      <div className="row" style={{ alignItems: "end", marginTop: 12 }}>
+        <Select label="Função do novo tripulante" value={role} onChange={setRole} options={CREW_ROLES.map((r) => ({ value: r, label: CREW_ROLE_LABEL[r] }))} />
+        <button className="btn" onClick={add}>Adicionar tripulante</button>
+        {anyDeleted && <button className="btn" onClick={restore}>Restaurar tripulantes padrão</button>}
+      </div>
+    </>
+  );
+}
+
+function CrewCard({ member, value, frame }: { member: CrewMember; value: CharacterCustomization; frame: number }) {
+  const save = useCharacters((s) => s.save);
+  const [confirming, setConfirming] = useState(false);
+  const key = crewKey(member.id);
+  return (
+    <CustomCard storeKey={key} title={value.name?.trim() || member.defaultName} defaultClass={CREW_DEFAULT_CLASS[member.role]} value={value} frame={frame} nameEditable note={`Tripulante · ${CREW_ROLE_LABEL[member.role]}`}>
+      <Select label="Função" value={member.role} onChange={(r: CrewRole) => void save(key, { ...value, role: r })} options={CREW_ROLES.map((r) => ({ value: r, label: CREW_ROLE_LABEL[r] }))} />
+      <div className="row" style={{ gap: 8 }}>
+        {confirming ? (
+          <>
+            <button className="btn small danger" onClick={() => void save(key, { ...value, deleted: true })}>Confirmar exclusão</button>
+            <button className="btn small" onClick={() => setConfirming(false)}>Cancelar</button>
+          </>
+        ) : (
+          <button className="btn small" aria-label={`Excluir tripulante ${member.defaultName}`} onClick={() => setConfirming(true)}>Excluir tripulante</button>
+        )}
+      </div>
+    </CustomCard>
   );
 }
 

@@ -6,6 +6,7 @@ import { backend } from "../bridge/backend";
 import { useWorld } from "../stores/world";
 import { useSettings } from "../stores/settings";
 import { useCharacters } from "../stores/characters";
+import { useCrew } from "../stores/crew";
 import { OverlayScene, compactWidth, type ScreenPos } from "./scene";
 
 /**
@@ -22,7 +23,6 @@ export function OverlayApp() {
   const scheduler = useMemo(() => new MessageScheduler(), []);
   const world = useWorld((s) => s.world);
   const settings = useSettings((s) => s.settings);
-  const custom = useCharacters((s) => s.custom);
 
   useEffect(() => {
     void useWorld.getState().init();
@@ -50,6 +50,8 @@ export function OverlayApp() {
   // Only agents that are actually working show up on the desktop: idle and finished
   // agents are asleep in the castle, so the strip stays empty (and hidden) between tasks.
   const agents = useMemo(() => activeAgents(world).filter(isWorking), [world]);
+  // Working agents wear the name and looks of the crew member doing their job in the castle.
+  const custom = useCrew().custom;
   const encounters = useMemo(() => Object.values(world.encounters), [world]);
 
   useEffect(() => {

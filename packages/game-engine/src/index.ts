@@ -5,3 +5,4 @@ export * from "./classes";
 export * from "./assets";
 export * from "./motion";
 export * from "./castle";
+export * from "./crew";

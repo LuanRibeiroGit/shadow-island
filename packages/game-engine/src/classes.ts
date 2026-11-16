@@ -64,6 +64,10 @@ export interface CharacterCustomization {
   weapon?: string;
   scale?: number;
   hidden?: boolean;
+  /** Crew members only (`agent:crew:<id>`): the function this member performs. */
+  role?: Specialty | "main";
+  /** Crew members only: the user removed this member from the castle. */
+  deleted?: boolean;
 }
 
 export interface ResolvedCharacter {

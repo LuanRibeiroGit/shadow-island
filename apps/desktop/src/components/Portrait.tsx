@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import type { Agent } from "@ids/shared";
 import { resolveCharacter, visualFor, type Palette } from "@ids/game-engine";
 import { characterSheet, frameRect, loadManifest } from "../characters/sprites";
-import { useCharacters } from "../stores/characters";
+import { useCrew } from "../stores/crew";
 
 /** One frame of a character spritesheet, recolored, drawn on a 2D canvas (no Pixi). */
 export function SpriteCanvas({ sprite, palette, animation = "idle", frame = 0, size = 40, label }: { sprite: string; palette: Palette; animation?: string; frame?: number; size?: number; label?: string }) {
@@ -29,7 +29,7 @@ export function SpriteCanvas({ sprite, palette, animation = "idle", frame = 0, s
 
 /** Portrait of an agent using its resolved character (class, colors, name). */
 export function Portrait({ agent, size = 40, animation }: { agent: Agent; size?: number; animation?: string }) {
-  const custom = useCharacters((s) => s.custom);
+  const custom = useCrew().custom;
   const ch = resolveCharacter(agent, custom);
   const anim = animation ?? visualFor(agent, Date.now()).animation;
   return <SpriteCanvas sprite={ch.cls.sprite} palette={ch.palette} animation={anim} size={size} label={ch.name} />;

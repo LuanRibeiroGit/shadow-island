@@ -5,7 +5,7 @@ import { monsterInfo, resolveCharacter, SPECIALTY_LABEL, visualFor } from "@ids/
 import { backend } from "../bridge/backend";
 import { useWorld } from "../stores/world";
 import { useSettings } from "../stores/settings";
-import { useCharacters } from "../stores/characters";
+import { useCrew } from "../stores/crew";
 import { useUi } from "../stores/ui";
 import { Portrait } from "../components/Portrait";
 import { Stat } from "../components/Stat";
@@ -16,7 +16,7 @@ export function AgentPage({ agentId }: { agentId: string }) {
   const live = useWorld((s) => s.world.agents[agentId]);
   const usageVersion = useWorld((s) => s.world.usageVersion);
   const prices = useSettings((s) => s.settings.metrics.prices);
-  const custom = useCharacters((s) => s.custom);
+  const custom = useCrew().custom;
   const go = useUi((s) => s.go);
 
   useEffect(() => {

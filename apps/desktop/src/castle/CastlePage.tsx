@@ -2,10 +2,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Room } from "@ids/shared";
 import { activeAgents, activeSessions, agentsByRoom, currentQuest, openMissions } from "@ids/event-system";
 import { estimateCost, formatTokens, formatUsd, sumUsage } from "@ids/analytics";
-import { resolveCharacter, visualFor } from "@ids/game-engine";
+import { isCrewId, resolveCharacter, visualFor } from "@ids/game-engine";
 import { useWorld } from "../stores/world";
 import { useSettings } from "../stores/settings";
 import { useCharacters } from "../stores/characters";
+import { useCrew } from "../stores/crew";
 import { useUi } from "../stores/ui";
 import { backend } from "../bridge/backend";
 import { Portrait } from "../components/Portrait";
@@ -45,6 +46,9 @@ export function CastlePage({ room }: { room?: string }) {
   const world = useWorld((s) => s.world);
   const settings = useSettings((s) => s.settings);
   const custom = useCharacters((s) => s.custom);
+  const crew = useCrew();
+  const realOf = useRef(crew.realOf);
+  realOf.current = crew.realOf;
   const go = useUi((s) => s.go);
   const selected = (room as Room | undefined) ?? "throne";
 
@@ -52,7 +56,13 @@ export function CastlePage({ room }: { room?: string }) {
     const s = new CastleScene();
     scene.current = s;
     s.onRoom = (r) => go({ page: "castle", room: r });
-    s.onAgent = (id) => go({ page: "agent", agentId: id });
+    // A crew member doing a real agent's job opens that agent; a resting one opens the crew page.
+    s.onAgent = (id) => {
+      const real = realOf.current.get(id);
+      if (real) go({ page: "agent", agentId: real });
+      else if (isCrewId(id)) go({ page: "characters" });
+      else go({ page: "agent", agentId: id });
+    };
     s.onZoom = (z, fit) => setZoom({ zoom: z, fit });
     s.onCamera = setPlates;
     void s.init(host.current!).then(() => setReady(true));
@@ -69,7 +79,7 @@ export function CastlePage({ room }: { room?: string }) {
   }, [finishedCount]);
   const level = restorationLevel(completed ?? 0);
 
-  const agents = useMemo(() => activeAgents(world), [world]);
+  const agents = crew.agents;
   const encounters = useMemo(() => Object.values(world.encounters), [world]);
   useEffect(() => {
     if (!ready || !scene.current) return;
@@ -119,7 +129,7 @@ export function CastlePage({ room }: { room?: string }) {
 
 function AgentList({ ids }: { ids: string[] }) {
   const world = useWorld((s) => s.world);
-  const custom = useCharacters((s) => s.custom);
+  const custom = useCrew().custom;
   const go = useUi((s) => s.go);
   const t = useT();
   const list = ids.map((id) => world.agents[id]).filter((a) => !!a);
