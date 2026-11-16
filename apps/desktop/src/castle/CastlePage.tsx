@@ -51,11 +51,17 @@ export function CastlePage({ room }: { room?: string }) {
   realOf.current = crew.realOf;
   const go = useUi((s) => s.go);
   const selected = (room as Room | undefined) ?? "throne";
+  const [named, setNamed] = useState<Room | null>(null);
 
   useEffect(() => {
     const s = new CastleScene();
     scene.current = s;
-    s.onRoom = (r) => go({ page: "castle", room: r });
+    // A room's name plate shows only after that room is clicked; a click elsewhere hides it.
+    s.onRoom = (r) => {
+      setNamed(r);
+      go({ page: "castle", room: r });
+    };
+    s.onEmpty = () => setNamed(null);
     // A crew member doing a real agent's job opens that agent; a resting one opens the crew page.
     s.onAgent = (id) => {
       const real = realOf.current.get(id);
@@ -94,9 +100,9 @@ export function CastlePage({ room }: { room?: string }) {
         <div ref={host} className="castle-canvas-host" />
         <div className="room-plates" aria-hidden={false}>
           {plates
-            .filter((p) => !settings.castle.hiddenRooms.includes(p.room))
+            .filter((p) => p.room === named && !settings.castle.hiddenRooms.includes(p.room))
             .map((p) => (
-              <button key={p.room} className={`room-plate${selected === p.room ? " on" : ""}`} style={{ left: p.x, top: p.y }} onClick={() => go({ page: "castle", room: p.room })}>
+              <button key={p.room} className="room-plate on" style={{ left: p.x, top: p.y }} onClick={() => setNamed(null)}>
                 <b>{settings.castle.roomNames[p.room] || ROOM_LABEL[p.room]}</b>
                 <span>{ROOM_SUB[p.room]}</span>
               </button>

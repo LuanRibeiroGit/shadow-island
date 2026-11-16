@@ -207,6 +207,8 @@ export class CastleScene {
   private hover: Room | null = null;
   private selected: Room | undefined;
   onRoom: (r: Room) => void = () => {};
+  /** A click on the map outside every room. */
+  onEmpty: () => void = () => {};
   onAgent: (id: string) => void = () => {};
 
   /** Camera: zoom and pan applied to `root`. `fit` is the zoom that shows the whole castle. */
@@ -274,6 +276,7 @@ export class CastleScene {
       if (this.dragged) return;
       const r = this.roomAtGlobal(e);
       if (r) this.onRoom(r);
+      else this.onEmpty();
     });
     this.app.canvas.addEventListener("wheel", this.onWheel, { passive: false });
     this.ro = new ResizeObserver(() => {
