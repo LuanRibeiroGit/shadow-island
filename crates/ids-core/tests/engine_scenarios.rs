@@ -216,3 +216,40 @@ fn engine_state_survives_restart() {
     let e = Engine::open(&db, EngineConfig::default()).unwrap();
     assert_eq!(e.active_agents().len(), 2);
 }
+
+#[test]
+fn read_queries_over_a_real_scenario() {
+    use ids_core::db::queries::{self, Filter};
+    let mut e = Engine::in_memory(EngineConfig::default()).unwrap();
+    run(&mut e, &fixture("session-multiagent.jsonl"));
+    let c = e.conn();
+    let sessions = queries::sessions(c, &Filter::default()).unwrap();
+    assert_eq!(sessions.len(), 1);
+    assert_eq!(sessions[0].agent_count, 4);
+    assert_eq!(sessions[0].error_count, 1);
+    assert_eq!(sessions[0].session.project_name.as_deref(), Some("loja"));
+    assert_eq!(sessions[0].tokens.records, 0); // no transcript available -> unavailable
+
+    let detail = queries::session_detail(c, "sess-0001").unwrap().unwrap();
+    assert_eq!(detail.timeline.len(), 29);
+    assert_eq!(detail.missions.len(), 5);
+
+    let failures = queries::events(c, &Filter { status: Some("failure".into()), ..Default::default() }).unwrap();
+    assert_eq!(failures.len(), 1);
+    let testing = queries::events(c, &Filter { category: Some("testing".into()), ..Default::default() }).unwrap();
+    assert_eq!(testing.len(), 4);
+
+    let a = queries::agent_detail(c, "sess-0001#ag-test-1").unwrap().unwrap();
+    assert_eq!(a.encounters.len(), 1);
+    assert_eq!(a.stats.unwrap().monsters_defeated, 1);
+
+    let ov = queries::overview(c, None, 10_000).unwrap();
+    assert_eq!(ov.active_agents, 0);
+    assert_eq!(ov.missions_completed, 5);
+    assert_eq!(ov.errors, 1);
+    assert!(ov.active_time_ms > 0);
+
+    assert!(!queries::state_distribution(c, 0, 10_000).unwrap().is_empty());
+    assert_eq!(queries::category_distribution(c, 0).unwrap().iter().map(|d| d.count).sum::<i64>(), 7);
+    assert_eq!(queries::projects(c).unwrap().len(), 1);
+}
