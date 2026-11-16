@@ -1,0 +1,51 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Ilha das Sombras",
+  "mainBinaryName": "ilha-das-sombras",
+  "version": "0.1.0",
+  "identifier": "dev.ilhadassombras.app",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [
+      {
+        "label": "castle",
+        "title": "Ilha das Sombras",
+        "url": "index.html",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 960,
+        "minHeight": 620,
+        "center": true,
+        "visible": false,
+        "backgroundColor": "#0b1416"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'wasm-unsafe-eval'; connect-src ipc: http://ipc.localhost; font-src 'self' data:",
+      "capabilities": ["castle", "overlay"]
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["deb", "appimage", "msi", "nsis"],
+    "category": "DeveloperTool",
+    "shortDescription": "Seus agentes do Claude Code como uma tripulação espectral",
+    "longDescription": "Ilha das Sombras transforma a atividade real do Claude Code em um RPG em pixel art: personagens na área de trabalho, um castelo com salas, missões, monstros e métricas de uso.",
+    "externalBin": ["binaries/ids-hook"],
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.png", "icons/icon.ico"],
+    "linux": {
+      "deb": { "depends": [] },
+      "appimage": { "bundleMediaFramework": false }
+    },
+    "windows": {
+      "webviewInstallMode": { "type": "downloadBootstrapper" },
+      "nsis": { "installMode": "currentUser" }
+    }
+  }
+}

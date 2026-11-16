@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/ids-core", "crates/ids-hook"]
+members = ["apps/desktop/src-tauri", "crates/ids-core", "crates/ids-hook"]
 
 [workspace.package]
 version = "0.1.0"

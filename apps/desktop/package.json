@@ -1,0 +1,38 @@
+{
+  "name": "@ids/desktop",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit -p tsconfig.json && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "tauri": "tauri",
+    "sidecar": "node ../../scripts/prepare-sidecar.mjs",
+    "test:e2e": "playwright test --trace off"
+  },
+  "dependencies": {
+    "@ids/analytics": "workspace:*",
+    "@ids/event-system": "workspace:*",
+    "@ids/game-engine": "workspace:*",
+    "@ids/shared": "workspace:*",
+    "@tauri-apps/api": "2.12.5",
+    "@tauri-apps/plugin-autostart": "2.7.0",
+    "@tauri-apps/plugin-notification": "2.8.1",
+    "pixi.js": "8.23.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "recharts": "3.10.1",
+    "zustand": "5.1.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.1",
+    "@tauri-apps/cli": "2.12.4",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "6.3.0",
+    "typescript": "7.0.2",
+    "vite": "8.3.8"
+  }
+}

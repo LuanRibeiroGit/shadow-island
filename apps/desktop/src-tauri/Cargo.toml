@@ -1,0 +1,31 @@
+[package]
+name = "ilha-das-sombras"
+description = "Ilha das Sombras: gamified desktop companion for Claude Code agents"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+default-run = "ilha-das-sombras"
+
+[lib]
+name = "ilha_das_sombras_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+ids-core = { path = "../../../crates/ids-core" }
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-autostart = "2"
+tauri-plugin-single-instance = "2"
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-notification = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+tiny_http = "0.12"
+getrandom = "0.3"
+log = { version = "0.4", features = ["std"] }
+rusqlite = { version = "0.43", default-features = false, features = ["bundled"] }
+
+[dev-dependencies]
+tempfile = "3"
