@@ -7,6 +7,9 @@ import {
   AREAS,
   BEDS,
   BedRegistry,
+  ISO_SIZE,
+  ISO_W,
+  ISO_H,
   MAP_H,
   MAP_W,
   NAP_SPOT,
@@ -16,6 +19,9 @@ import {
   buildMap,
   destinationFor,
   feetOf,
+  fromIso,
+  isoOfTile,
+  toIso,
   findPath,
   nextVisualChange,
   resolveCharacter,
@@ -31,14 +37,14 @@ import {
 import { CharacterView, MonsterView, spawnEffect } from "../characters/pixi";
 import { loadImage, loadManifest } from "../characters/sprites";
 
-export const CASTLE_W = MAP_W * TILE_PX;
-export const CASTLE_H = MAP_H * TILE_PX;
+export const CASTLE_W = ISO_SIZE.w;
+export const CASTLE_H = ISO_SIZE.h;
 
 const ANIMATED = new Set(["forge", "cauldron"]);
 /** Walking speed in tiles per second. */
 const WALK_SPEED = 3.2;
-/** Characters are drawn at full sprite size (24 px on 16 px tiles). */
-const CHAR_SCALE = 1;
+/** Souls about one wall-height tall (36 px), in proportion to the furniture. */
+const CHAR_SCALE = 0.75;
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 6;
 /** How long a finished agent sleeps before fading away. */
@@ -46,7 +52,10 @@ const LEAVE_AFTER_MS = 6000;
 
 interface TileSet {
   source: TextureSource;
-  size: number;
+  cw: number;
+  ch: number;
+  ax: number;
+  ay: number;
   columns: number;
   tiles: Record<string, number>;
   cache: Map<string, Texture>;
@@ -184,14 +193,14 @@ export class CastleScene {
 
     const m = await loadManifest();
     if (this.destroyed) return;
-    const env = m.environments as unknown as Record<string, { image: string; tileSize?: number; columns?: number; tiles?: Record<string, number> }>;
-    const ts = env["castle-topdown"];
-    if (!ts) throw new Error("castle-topdown ausente no manifest");
+    const env = m.environments as unknown as Record<string, { image: string; cellWidth?: number; cellHeight?: number; anchorX?: number; anchorY?: number; columns?: number; tiles?: Record<string, number> }>;
+    const ts = env["castle-iso"];
+    if (!ts) throw new Error("castle-iso ausente no manifest");
     const img = await loadImage(ts.image);
     if (this.destroyed) return;
     const source = Texture.from(img).source;
     source.scaleMode = "nearest";
-    this.tiles = { source, size: ts.tileSize ?? 16, columns: ts.columns ?? 8, tiles: ts.tiles ?? {}, cache: new Map() };
+    this.tiles = { source, cw: ts.cellWidth ?? 32, ch: ts.cellHeight ?? 80, ax: ts.anchorX ?? 16, ay: ts.anchorY ?? 68, columns: ts.columns ?? 16, tiles: ts.tiles ?? {}, cache: new Map() };
     this.buildGround();
     this.buildRooms(0);
   }
@@ -203,8 +212,8 @@ export class CastleScene {
   }
 
   private roomAtGlobal(e: FederatedPointerEvent): Room | null {
-    const p = this.root.toLocal(e.global);
-    const r = roomOf(this.map, { x: Math.floor(p.x / TILE_PX), y: Math.floor(p.y / TILE_PX) });
+    const g = fromIso(this.root.toLocal(e.global));
+    const r = roomOf(this.map, { x: Math.floor(g.x / TILE_PX), y: Math.floor(g.y / TILE_PX) });
     return r && r !== "hall" ? r : null;
   }
 
@@ -271,49 +280,62 @@ export class CastleScene {
     if (!tx) {
       const i = t.tiles[name];
       if (i === undefined) return null;
-      tx = new Texture({ source: t.source, frame: new Rectangle((i % t.columns) * t.size, Math.floor(i / t.columns) * t.size, t.size, t.size) });
+      tx = new Texture({ source: t.source, frame: new Rectangle((i % t.columns) * t.cw, Math.floor(i / t.columns) * t.ch, t.cw, t.ch) });
       t.cache.set(name, tx);
     }
     return tx;
   }
 
-  private sprite(name: string, x: number, y: number, parent: Container): Sprite | null {
+  /** A sprite standing on tile (x, y): anchored at the tile centre, depth-sorted by it. */
+  private sprite(name: string, x: number, y: number, parent: Container, bias = 0): Sprite | null {
     const t = this.tex(name);
-    if (!t) return null;
+    if (!t || !this.tiles) return null;
     const s = new Sprite(t);
-    s.position.set(x, y);
+    s.anchor.set(this.tiles.ax / this.tiles.cw, this.tiles.ay / this.tiles.ch);
+    const c = isoOfTile({ x, y });
+    s.position.set(c.x, c.y);
+    s.zIndex = c.y + bias;
     parent.addChild(s);
     return s;
   }
 
-  /** Floors and walls: built once. */
+  /**
+   * Floors and walls: built once. Walls are blocks; only the outer back walls
+   * (north and west, with nothing walkable behind them) are full height, the
+   * others are cut down so rooms stay visible, like a doll house.
+   */
   private buildGround() {
+    const k = (x: number, y: number) => (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H ? "wall" : this.map.kind[y * MAP_W + x]);
+    const open = (x: number, y: number) => k(x, y) !== "wall";
     let n = 0;
     for (let y = 0; y < MAP_H; y++) {
       for (let x = 0; x < MAP_W; x++) {
         const i = y * MAP_W + x;
-        const kind = this.map.kind[i];
-        // Doorways are open passages: same floor as the rooms they join.
-        if (kind === "floor" || kind === "door") this.sprite(this.map.floor[i] ?? "floor_stone", x * TILE_PX, y * TILE_PX, this.groundLayer);
-        else {
-          const below = y + 1 < MAP_H ? this.map.kind[i + MAP_W] : "wall";
-          if (below === "wall") this.sprite("wall", x * TILE_PX, y * TILE_PX, this.groundLayer);
-          else {
-            // Wall faces seen from above, with torches and windows here and there.
-            n++;
-            const variant = n % 7 === 3 ? "torch" : n % 11 === 5 ? "window_lit" : n % 9 === 1 ? "banner" : n % 13 === 8 ? "window" : "wall_face";
-            if (variant === "torch") {
-              const s = this.sprite("torch0", x * TILE_PX, y * TILE_PX, this.groundLayer);
-              if (s) this.animTiles.push({ sprite: s, base: "torch" });
-            } else this.sprite(variant, x * TILE_PX, y * TILE_PX, this.groundLayer);
-          }
+        if (open(x, y)) {
+          this.sprite(this.map.floor[i] ?? "floor_stone", x, y, this.groundLayer);
+          continue;
         }
+        const near = [-2, -1, 1, 2].some((d) => open(x + d, y) || open(x, y + d)) || open(x + 1, y + 1) || open(x - 1, y - 1) || open(x + 1, y - 1) || open(x - 1, y + 1);
+        if (!near) continue;
+        const behind = open(x - 1, y) || open(x, y - 1) || open(x - 2, y) || open(x, y - 2) || open(x - 1, y - 1);
+        if (behind) {
+          this.sprite("wall_low", x, y, this.sortLayer, -1);
+          continue;
+        }
+        // Tall back wall: decorate the face that looks into a room.
+        const face = open(x, y + 1) ? "L" : open(x + 1, y) ? "R" : null;
+        n++;
+        let name = "wall_tall";
+        if (face) {
+          const deco = n % 5 === 2 ? "torch" : n % 7 === 4 ? "banner" : n % 6 === 0 ? "window" : null;
+          if (deco === "torch") name = `wall_tall_${face}_torch0`;
+          else if (deco) name = `wall_tall_${face}_${deco}`;
+        }
+        const s = this.sprite(name, x, y, this.sortLayer, -1);
+        if (s && name.endsWith("torch0")) this.animTiles.push({ sprite: s, base: name.slice(0, -1) });
       }
     }
-    for (const b of BEDS) {
-      const s = this.sprite("bed", b.x * TILE_PX, b.y * TILE_PX, this.sortLayer);
-      if (s) s.zIndex = b.y * TILE_PX + 1;
-    }
+    for (const b of BEDS) this.sprite("bed", b.x, b.y, this.sortLayer);
   }
 
   /** (Re)build furniture for a restoration level (unlocked by real completed missions). */
@@ -322,14 +344,13 @@ export class CastleScene {
     this.level = level;
     for (const s of this.propSprites) s.destroy();
     this.propSprites = [];
-    this.animTiles = this.animTiles.filter((a) => a.base === "torch");
+    this.animTiles = this.animTiles.filter((a) => a.base.startsWith("wall_"));
     for (const p of PROPS) {
       if ((p.min ?? 0) > level) continue;
       const animated = ANIMATED.has(p.tile);
       const flat = p.walkable === true;
-      const s = this.sprite(animated ? `${p.tile}0` : p.tile, p.x * TILE_PX, p.y * TILE_PX, flat ? this.groundLayer : this.sortLayer);
+      const s = this.sprite(animated ? `${p.tile}0` : p.tile, p.x, p.y, flat ? this.groundLayer : this.sortLayer);
       if (!s) continue;
-      s.zIndex = p.y * TILE_PX + TILE_PX - 3;
       this.propSprites.push(s);
       if (animated) this.animTiles.push({ sprite: s, base: p.tile });
     }
@@ -344,8 +365,15 @@ export class CastleScene {
   private drawHighlight() {
     this.highlight.clear();
     const draw = (room: Room, width: number, alpha: number) => {
-      const a = AREAS.find((x) => x.room === room);
-      if (a) this.highlight.rect(a.x * TILE_PX + 0.5, a.y * TILE_PX + 0.5, a.w * TILE_PX - 1, a.h * TILE_PX - 1).stroke({ width, color: 0x7cf2c2, alpha });
+      for (const a of AREAS.filter((x) => x.room === room)) {
+        const pts = [
+          [a.x, a.y],
+          [a.x + a.w, a.y],
+          [a.x + a.w, a.y + a.h],
+          [a.x, a.y + a.h],
+        ].map(([x, y]) => toIso({ x: x! * TILE_PX, y: y! * TILE_PX }));
+        this.highlight.poly(pts.flatMap((p) => [p.x, p.y])).fill({ color: 0x7cf2c2, alpha: alpha * 0.12 }).stroke({ width, color: 0x7cf2c2, alpha });
+      }
     };
     if (this.selected) draw(this.selected, 1, 0.8);
     if (this.hover && this.hover !== this.selected) draw(this.hover, 1, 0.35);
@@ -375,7 +403,10 @@ export class CastleScene {
       actor.leavingSince = null;
       actor.bed = bed;
       const vis = visualFor(a, now);
-      if (actor.lastState !== vis.state && vis.state === "SUCCESS") void spawnEffect(this.fxLayer, "sparkle", actor.pos.x, actor.pos.y - 16, 1);
+      if (actor.lastState !== vis.state && vis.state === "SUCCESS") {
+        const sp = toIso(actor.pos);
+        void spawnEffect(this.fxLayer, "sparkle", sp.x, sp.y - 30, 1);
+      }
       actor.lastState = vis.state;
       const d = destinationFor(vis.state, a.activity);
       if (d.kind === "bed") this.goToBed(actor);
@@ -409,6 +440,12 @@ export class CastleScene {
     });
     const sleeper = new Sprite(this.tex("sleeper") ?? Texture.EMPTY);
     const zz = new Sprite(this.tex("zz") ?? Texture.EMPTY);
+    if (this.tiles) {
+      const ax = this.tiles.ax / this.tiles.cw;
+      const ay = this.tiles.ay / this.tiles.ch;
+      sleeper.anchor.set(ax, ay);
+      zz.anchor.set(ax, ay);
+    }
     sleeper.eventMode = "static";
     sleeper.cursor = "pointer";
     sleeper.on("pointertap", (e) => {
@@ -417,7 +454,7 @@ export class CastleScene {
     });
     this.sortLayer.addChild(view, sleeper);
     this.fxLayer.addChild(zz);
-    const px = bed ? { x: bed.x * TILE_PX + TILE_PX / 2, y: bed.y * TILE_PX + TILE_PX - 2 } : feetOf(start);
+    const px = feetOf(bed ?? start);
     const actor: Actor = {
       id: a.id,
       agent: a,
@@ -476,13 +513,15 @@ export class CastleScene {
     view.visible = !sleeping && !ch.hidden;
     sleeper.visible = sleeping && !ch.hidden;
     zz.visible = sleeper.visible;
-    view.position.set(Math.round(actor.pos.x), Math.round(actor.pos.y));
-    view.zIndex = actor.pos.y;
+    const sp = toIso(actor.pos);
+    view.position.set(Math.round(sp.x), Math.round(sp.y));
+    view.zIndex = sp.y + 0.5;
     if (sleeping && actor.bed) {
-      sleeper.position.set(actor.bed.x * TILE_PX, actor.bed.y * TILE_PX);
-      sleeper.zIndex = actor.bed.y * TILE_PX + 2;
+      const b = isoOfTile(actor.bed);
+      sleeper.position.set(b.x, b.y);
+      sleeper.zIndex = b.y + 0.2;
       sleeper.tint = ch.palette.cloak;
-      zz.position.set(actor.bed.x * TILE_PX + 6, actor.bed.y * TILE_PX - 12);
+      zz.position.set(b.x, b.y);
     }
   }
 
@@ -536,14 +575,16 @@ export class CastleScene {
     for (const m of this.monsters.values()) {
       const a = this.actors.get(m.encounter.agentId);
       if (a) {
-        m.position.set(Math.round(a.pos.x + 20), Math.round(a.pos.y));
-        m.zIndex = a.pos.y;
+        const sp = toIso(a.pos);
+        m.position.set(Math.round(sp.x + 22), Math.round(sp.y));
+        m.zIndex = sp.y;
       }
     }
   }
 
   private remove(actor: Actor) {
-    void spawnEffect(this.fxLayer, "mist", actor.pos.x, actor.pos.y - 6, 1);
+    const sp = toIso(actor.pos);
+    void spawnEffect(this.fxLayer, "mist", sp.x, sp.y - 10, 1);
     actor.view.destroy({ children: true });
     actor.sleeper.destroy();
     actor.zz.destroy();

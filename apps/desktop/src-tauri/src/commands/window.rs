@@ -33,6 +33,25 @@ pub fn set_overlay_hitboxes(state: State<'_, AppState>, boxes: Vec<Rect>) -> Cmd
     Ok(())
 }
 
+/// The overlay reports how wide its souls are, so the strip can shrink to them.
+#[tauri::command]
+pub fn set_overlay_content_width(app: AppHandle, state: State<'_, AppState>, width: u32) -> CmdResult<()> {
+    let width = width.clamp(48, 8192);
+    {
+        let mut g = state.overlay_content_width.lock().map_err(|_| "lock")?;
+        if *g == Some(width) {
+            return Ok(());
+        }
+        *g = Some(width);
+    }
+    if let Some(w) = app.get_webview_window(windows::OVERLAY) {
+        if state.backend_settings().desktop.auto_width {
+            windows::position_overlay(&app, &w);
+        }
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub fn overlay_info(app: AppHandle, state: State<'_, AppState>) -> CmdResult<serde_json::Value> {
     let visible = app.get_webview_window(windows::OVERLAY).and_then(|w| w.is_visible().ok()).unwrap_or(false);

@@ -49,6 +49,7 @@ export interface Backend {
   showCastle(route?: string): Promise<void>;
   setOverlayVisible(visible: boolean): Promise<void>;
   listMonitors(): Promise<MonitorInfo[]>;
+  setOverlayContentWidth(width: number): Promise<void>;
   setOverlayHitboxes(boxes: Rect[]): Promise<void>;
   quit(): Promise<void>;
 

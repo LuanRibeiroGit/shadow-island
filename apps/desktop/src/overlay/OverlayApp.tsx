@@ -6,7 +6,7 @@ import { backend } from "../bridge/backend";
 import { useWorld } from "../stores/world";
 import { useSettings } from "../stores/settings";
 import { useCharacters } from "../stores/characters";
-import { OverlayScene, type ScreenPos } from "./scene";
+import { OverlayScene, compactWidth, type ScreenPos } from "./scene";
 
 /**
  * Desktop overlay window: transparent, borderless strip near the taskbar with one
@@ -55,7 +55,7 @@ export function OverlayApp() {
   useEffect(() => {
     if (!ready || !scene.current) return;
     const d = settings.desktop;
-    scene.current.setOptions({ scale: d.characterScale / 2, animationSpeed: d.animationSpeed, animationsEnabled: d.animationsEnabled, walkSpeed: d.walkSpeed, showNames: d.showNames }, custom);
+    scene.current.setOptions({ scale: d.characterScale / 2, animationSpeed: d.animationSpeed, animationsEnabled: d.animationsEnabled, walkSpeed: d.walkSpeed, showNames: d.showNames, compact: d.autoWidth }, custom);
     void scene.current.sync(agents, encounters, Date.now());
   }, [ready, agents, encounters, settings.desktop, custom]);
 
@@ -88,6 +88,13 @@ export function OverlayApp() {
     return () => window.clearTimeout(t);
   }, [hasAgents, settings.desktop.overlayEnabled]);
 
+  // Compact strip: ask for just the width of the souls working right now.
+  const want = compactWidth(agents.length, settings.desktop.characterScale / 2);
+  useEffect(() => {
+    if (!settings.desktop.autoWidth || agents.length === 0) return;
+    void backend().then((b) => b.setOverlayContentWidth(want));
+  }, [want, agents.length, settings.desktop.autoWidth]);
+
   // Report clickable areas so the rest of the strip is click-through.
   useEffect(() => {
     const boxes = positions.map((p) => ({ x: Math.round(p.x - p.width / 2), y: Math.round(p.top), width: Math.round(p.width), height: Math.round(p.y - p.top) }));
@@ -110,7 +117,8 @@ export function OverlayApp() {
         const ch = resolveCharacter(a, custom);
         return (
           <div key={p.id}>
-            {b && <div className="bubble" style={{ left: clampX(p.x, 130), top: Math.max(24, p.top + 2) }}>{b.text}</div>}
+            {/* Bubbles need room above the head: a strip as tall as the souls shows none. */}
+            {b && p.top >= 26 && <div className="bubble" style={{ left: clampX(p.x, 130), top: p.top - 24 }}>{b.text}</div>}
             {settings.desktop.showNames && <div className="nameplate" style={{ left: clampX(p.x, 60), top: p.y - 2 }}>{ch.name}</div>}
           </div>
         );

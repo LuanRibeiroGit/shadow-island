@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-use crate::platform::OverlayPlacement;
+use crate::platform::{OverlayAlign, OverlayPlacement};
 
 pub const SETTINGS_KEY: &str = "app";
 
@@ -63,6 +63,9 @@ pub struct Desktop {
     pub height: u32,
     /// Fraction of the work-area width the strip spans (0.2..1).
     pub width_fraction: f32,
+    /// Strip only as wide as the working souls (ignores width_fraction).
+    pub auto_width: bool,
+    pub align: OverlayAlign,
     pub monitor: Option<String>,
     /// Linux/Wayland: run through XWayland so the overlay can be placed and kept on top.
     pub prefer_x11_on_wayland: bool,
@@ -70,7 +73,7 @@ pub struct Desktop {
 
 impl Default for Desktop {
     fn default() -> Self {
-        Self { overlay_enabled: true, placement: OverlayPlacement::Bottom, height: 72, width_fraction: 1.0, monitor: None, prefer_x11_on_wayland: true }
+        Self { overlay_enabled: true, placement: OverlayPlacement::Bottom, height: 52, width_fraction: 1.0, auto_width: true, align: OverlayAlign::Right, monitor: None, prefer_x11_on_wayland: true }
     }
 }
 
@@ -105,13 +108,13 @@ mod tests {
         let s = parse(&json!({"claude": {"keepPromptExcerpt": false}, "theme": {"x": 1}}));
         assert!(!s.claude.keep_prompt_excerpt);
         assert!(s.claude.integration_enabled);
-        assert_eq!(s.desktop.height, 72);
+        assert_eq!(s.desktop.height, 52);
     }
 
     #[test]
     fn invalid_values_fall_back() {
         let s = parse(&json!({"desktop": {"height": "tall"}}));
-        assert_eq!(s.desktop.height, 72);
+        assert_eq!(s.desktop.height, 52);
         assert!(validate(&json!([1])).is_err());
     }
 }

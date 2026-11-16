@@ -26,6 +26,9 @@ export interface Settings {
     placement: "bottom" | "top" | "taskbar";
     height: number;
     widthFraction: number;
+    /** Strip only as wide as the souls working. */
+    autoWidth: boolean;
+    align: "left" | "center" | "right";
     monitor: string | null;
     preferX11OnWayland: boolean;
     characterScale: number;
@@ -72,8 +75,10 @@ export const DEFAULT_SETTINGS: Settings = {
   desktop: {
     overlayEnabled: true,
     placement: "bottom",
-    height: 72,
+    height: 52,
     widthFraction: 1,
+    autoWidth: true,
+    align: "right",
     monitor: null,
     preferX11OnWayland: true,
     characterScale: 2,

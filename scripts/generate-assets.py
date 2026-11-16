@@ -1047,6 +1047,9 @@ def main():
     build_effects(manifest)
     build_environment(manifest)
     build_topdown(manifest)
+    import iso_castle  # noqa: E402 (same folder)
+
+    iso_castle.build(ASSETS / "environments" / "castle-iso.png", manifest)
     with open(ASSETS / "manifest.json", "w") as f:
         json.dump(manifest, f, indent=2, ensure_ascii=False)
     print(f"assets written to {ASSETS}")

@@ -10,6 +10,8 @@ export interface OverlayOptions extends ViewOptions {
   walkSpeed: number;
   /** Reserve space under the feet for name labels. */
   showNames: boolean;
+  /** Strip sized to the souls: one slot each, side by side, small wander. */
+  compact?: boolean;
 }
 
 export interface ScreenPos {
@@ -100,7 +102,7 @@ export class OverlayScene {
       }
     }
     const width = this.app.screen.width;
-    const spacing = 90 * this.opts.scale;
+    const spacing = this.opts.compact ? slotSpacing(this.opts.scale) : 90 * this.opts.scale;
     agents.forEach((a, i) => {
       let v = this.views.get(a.id);
       if (!v) {
@@ -112,7 +114,7 @@ export class OverlayScene {
         });
         this.world.addChild(v);
         this.views.set(a.id, v);
-        const home = homeX(a.id, i, width, spacing);
+        const home = this.opts.compact ? slotX(i, spacing) : homeX(a.id, i, width, spacing);
         this.walkers.set(a.id, { x: home, targetX: home, facing: 1, home, pinned: false, nextWander: 0 });
         void spawnEffect(this.world, "mist", home, this.ground() - 10, 2);
       }
@@ -123,6 +125,12 @@ export class OverlayScene {
         void spawnEffect(this.world, "sparkle", w.x, this.ground() - 40 * this.opts.scale, 2 * this.opts.scale);
       }
       this.lastStates.set(a.id, vis.state);
+      if (this.opts.compact) {
+        // Slots follow the order of the souls so the strip can shrink around them.
+        const w = this.walkers.get(a.id)!;
+        w.home = slotX(i, spacing);
+        if (Math.abs(w.targetX - w.home) > 12 * this.opts.scale) w.targetX = w.home;
+      }
       void v.sync(a, this.custom, now, this.opts);
     });
 
@@ -178,7 +186,7 @@ export class OverlayScene {
       if (!w) continue;
       const vis = visualFor(v.agent, now);
       if (vis.moving && !w.pinned && this.drag?.id !== id && now > w.nextWander && Math.abs(w.x - w.targetX) < 1) {
-        w.targetX = wanderTarget(w.home, now / 1000 + w.home, 70 * this.opts.scale, width, 30);
+        w.targetX = wanderTarget(w.home, now / 1000 + w.home, (this.opts.compact ? 10 : 70) * this.opts.scale, width, this.opts.compact ? 12 : 30);
         w.nextWander = now + 1500 + ((w.home * 7) % 1500);
       }
       if (!vis.moving) w.targetX = w.x; // stop where you are
@@ -210,3 +218,11 @@ export class OverlayScene {
     this.app.destroy(true, { children: true });
   }
 }
+
+/** Width the strip needs for `n` souls in compact mode. */
+export function compactWidth(n: number, scale: number): number {
+  return Math.max(1, n) * slotSpacing(scale);
+}
+
+export const slotSpacing = (scale: number) => Math.round(64 * scale);
+const slotX = (i: number, spacing: number) => Math.round(spacing / 2 + i * spacing);

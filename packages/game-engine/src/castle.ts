@@ -384,7 +384,7 @@ export function stepAlong(pos: { x: number; y: number }, path: Point[], dtMs: nu
   while (budget > 0 && rest.length) {
     const target = rest[0]!;
     const tx = target.x * TILE_PX + TILE_PX / 2;
-    const ty = target.y * TILE_PX + TILE_PX - 2;
+    const ty = target.y * TILE_PX + TILE_PX / 2;
     const ddx = tx - x;
     const ddy = ty - y;
     const dist = Math.hypot(ddx, ddy);
@@ -404,5 +404,31 @@ export function stepAlong(pos: { x: number; y: number }, path: Point[], dtMs: nu
 }
 
 /** Pixel position where a character standing on a tile has its feet. */
-export const feetOf = (p: Point) => ({ x: p.x * TILE_PX + TILE_PX / 2, y: p.y * TILE_PX + TILE_PX - 2 });
-export const tileOf = (px: { x: number; y: number }): Point => ({ x: Math.floor(px.x / TILE_PX), y: Math.floor((px.y - 1) / TILE_PX) });
+export const feetOf = (p: Point) => ({ x: p.x * TILE_PX + TILE_PX / 2, y: p.y * TILE_PX + TILE_PX / 2 });
+export const tileOf = (px: { x: number; y: number }): Point => ({ x: Math.floor(px.x / TILE_PX), y: Math.floor(px.y / TILE_PX) });
+
+/**
+ * Isometric projection used by the castle renderer: grid pixels (TILE_PX per tile)
+ * to screen pixels, with 2:1 diamonds of ISO_W x ISO_H.
+ */
+export const ISO_W = 32;
+export const ISO_H = 16;
+/** Height of the back walls in screen pixels (room above the map for them). */
+export const ISO_WALL = 40;
+export const ISO_ORIGIN = { x: MAP_H * (ISO_W / 2), y: ISO_WALL + 8 };
+export const ISO_SIZE = { w: (MAP_W + MAP_H) * (ISO_W / 2), h: (MAP_W + MAP_H) * (ISO_H / 2) + ISO_WALL + 16 };
+
+export function toIso(px: { x: number; y: number }): { x: number; y: number } {
+  const gx = px.x / TILE_PX;
+  const gy = px.y / TILE_PX;
+  return { x: ISO_ORIGIN.x + (gx - gy) * (ISO_W / 2), y: ISO_ORIGIN.y + (gx + gy) * (ISO_H / 2) };
+}
+
+export function fromIso(s: { x: number; y: number }): { x: number; y: number } {
+  const a = (s.x - ISO_ORIGIN.x) / (ISO_W / 2);
+  const b = (s.y - ISO_ORIGIN.y) / (ISO_H / 2);
+  return { x: ((a + b) / 2) * TILE_PX, y: ((b - a) / 2) * TILE_PX };
+}
+
+/** Screen position of a tile's centre. */
+export const isoOfTile = (p: Point) => toIso(feetOf(p));

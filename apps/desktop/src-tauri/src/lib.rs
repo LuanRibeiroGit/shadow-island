@@ -112,7 +112,7 @@ pub(crate) fn apply_settings(app: &AppHandle, before: Option<&BackendSettings>) 
         }
     }
     let overlay_changed = before
-        .map(|b| b.desktop.overlay_enabled != s.desktop.overlay_enabled || b.desktop.height != s.desktop.height || b.desktop.placement != s.desktop.placement || b.desktop.width_fraction != s.desktop.width_fraction || b.desktop.monitor != s.desktop.monitor)
+        .map(|b| b.desktop.overlay_enabled != s.desktop.overlay_enabled || b.desktop.height != s.desktop.height || b.desktop.placement != s.desktop.placement || b.desktop.width_fraction != s.desktop.width_fraction || b.desktop.auto_width != s.desktop.auto_width || b.desktop.align != s.desktop.align || b.desktop.monitor != s.desktop.monitor)
         .unwrap_or(true);
     if overlay_changed {
         windows::set_overlay_visible(app, s.desktop.overlay_enabled);
@@ -152,6 +152,7 @@ fn setup(app: &mut tauri::App, adapter: PlatformAdapter, background: bool) -> Re
         token: runtime::new_token(),
         settings: Mutex::new(stored),
         overlay_hitboxes: Mutex::new(Vec::new()),
+        overlay_content_width: Mutex::new(None),
     });
 
     let state = handle.state::<AppState>();
@@ -207,6 +208,7 @@ pub fn run() {
             commands::window::set_overlay_hitboxes,
             commands::window::overlay_info,
             commands::window::list_monitors,
+            commands::window::set_overlay_content_width,
             commands::window::quit_app,
             commands::system::get_settings,
             commands::system::save_settings,

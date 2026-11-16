@@ -92,8 +92,12 @@ function DesktopSection() {
             ]}
           />
         </div>
-        <Range label="Altura da faixa" value={d.height} min={48} max={320} step={4} format={(v) => `${v}px`} onChange={(v) => set({ height: v })} />
-        <Range label="Largura da faixa" value={d.widthFraction} min={0.2} max={1} step={0.05} format={(v) => `${Math.round(v * 100)}%`} onChange={(v) => set({ widthFraction: v })} />
+        <Range label="Altura da faixa" value={d.height} min={32} max={320} step={4} format={(v) => `${v}px`} onChange={(v) => set({ height: v })} />
+        <Toggle label="Largura só das almas trabalhando" hint="A faixa cresce quando mais agentes trabalham e encolhe quando param." checked={d.autoWidth} onChange={(v) => set({ autoWidth: v })} />
+        <div className="row" style={{ margin: "8px 0" }}>
+          <Select label="Lado da tela" value={d.align} onChange={(v) => set({ align: v })} options={[{ value: "left", label: "Esquerda" }, { value: "center", label: "Centro" }, { value: "right", label: "Direita" }]} />
+        </div>
+        {!d.autoWidth && <Range label="Largura da faixa" value={d.widthFraction} min={0.2} max={1} step={0.05} format={(v) => `${Math.round(v * 100)}%`} onChange={(v) => set({ widthFraction: v })} />}
         <Range label="Tamanho dos personagens" value={d.characterScale} min={1} max={4} step={1} format={(v) => `${v}x`} onChange={(v) => set({ characterScale: v })} />
         <Range label="Velocidade de caminhada" value={d.walkSpeed} min={8} max={80} step={2} format={(v) => `${v}px/s`} onChange={(v) => set({ walkSpeed: v })} />
         <Range label="Velocidade das animações" value={d.animationSpeed} min={0.5} max={2} step={0.1} format={(v) => `${v.toFixed(1)}x`} onChange={(v) => set({ animationSpeed: v })} />

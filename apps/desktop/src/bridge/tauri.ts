@@ -30,6 +30,7 @@ export function createTauriBackend(): Backend {
     showCastle: (route) => invoke("show_castle", { route: route ?? null }),
     setOverlayVisible: (visible) => invoke("set_overlay_visible", { visible }),
     listMonitors: () => invoke("list_monitors"),
+    setOverlayContentWidth: (width) => invoke("set_overlay_content_width", { width }),
     setOverlayHitboxes: (boxes) => invoke("set_overlay_hitboxes", { boxes }),
     quit: () => invoke("quit_app"),
     onUpdates: (cb) => on<Update[]>("ids://updates", cb),

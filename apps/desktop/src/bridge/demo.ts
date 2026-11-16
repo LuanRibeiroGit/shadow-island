@@ -136,6 +136,7 @@ export function createDemoBackend(): Backend {
     showCastle: async () => {},
     setOverlayVisible: async () => {},
     listMonitors: async () => [],
+    setOverlayContentWidth: async () => {},
     setOverlayHitboxes: async () => {},
     quit: async () => {},
     onUpdates: async (cb) => {

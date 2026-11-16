@@ -8,7 +8,7 @@ use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, LogicalPosition, LogicalSize, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent};
 
-use crate::platform::{overlay_rect, CloseBehavior, OverlayPlacement, Rect};
+use crate::platform::{overlay_rect_fit, CloseBehavior, OverlayPlacement, Rect};
 use crate::state::AppState;
 
 pub const CASTLE: &str = "castle";
@@ -126,7 +126,7 @@ pub fn ensure_overlay(app: &AppHandle) -> tauri::Result<WebviewWindow> {
         .shadow(false)
         .focused(false)
         .visible(false)
-        .inner_size(800.0, 72.0)
+        .inner_size(800.0, 52.0)
         .build()?;
     position_overlay(app, &w);
     start_click_through_tracker(app.clone());
@@ -159,7 +159,8 @@ pub fn position_overlay(app: &AppHandle, w: &WebviewWindow) {
         width: to_logical(wa.size.width as f64) as u32,
         height: to_logical(wa.size.height as f64) as u32,
     };
-    let r = overlay_rect(m, Some(work), s.placement, s.height, s.width_fraction);
+    let content = if s.auto_width { state.overlay_content_width.lock().ok().and_then(|g| *g) } else { None };
+    let r = overlay_rect_fit(m, Some(work), s.placement, s.height, s.width_fraction, content, s.align);
     let _ = w.set_size(LogicalSize::new(r.width as f64, r.height as f64));
     let _ = w.set_position(LogicalPosition::new(r.x as f64, r.y as f64));
 

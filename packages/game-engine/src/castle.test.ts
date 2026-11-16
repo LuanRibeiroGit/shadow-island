@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ROOMS } from "@ids/shared";
-import { AREAS, BEDS, BedRegistry, DOORS, PROPS, STATIONS, bedsideOf, buildMap, destinationFor, feetOf, findPath, isWalkable, roomOf, stepAlong, tileOf } from "./castle";
+import { AREAS, BEDS, BedRegistry, DOORS, PROPS, STATIONS, bedsideOf, buildMap, destinationFor, feetOf, findPath, fromIso, isWalkable, isoOfTile, roomOf, stepAlong, tileOf, toIso } from "./castle";
 
 const map = buildMap();
 
@@ -62,6 +62,17 @@ describe("ecosystem rules", () => {
     const c = r.assign(["c", "d"]);
     expect(c.has("a")).toBe(false);
     expect(new Set(c.values()).size).toBe(2);
+  });
+
+  it("projects to isometric and back", () => {
+    const p = { x: 123, y: 456 };
+    const back = fromIso(toIso(p));
+    expect(back.x).toBeCloseTo(p.x);
+    expect(back.y).toBeCloseTo(p.y);
+    // Moving +x goes right-down, +y goes left-down.
+    const o = isoOfTile({ x: 5, y: 5 });
+    expect(isoOfTile({ x: 6, y: 5 }).x).toBeGreaterThan(o.x);
+    expect(isoOfTile({ x: 5, y: 6 }).x).toBeLessThan(o.x);
   });
 
   it("walks along a path at the given speed", () => {

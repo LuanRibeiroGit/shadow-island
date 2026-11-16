@@ -26,6 +26,8 @@ pub struct AppState {
     pub settings: Mutex<Value>,
     /// Clickable regions of the overlay (logical px, window-relative).
     pub overlay_hitboxes: Mutex<Vec<Rect>>,
+    /// Width the overlay content needs (souls working), reported by the overlay page.
+    pub overlay_content_width: Mutex<Option<u32>>,
 }
 
 impl AppState {

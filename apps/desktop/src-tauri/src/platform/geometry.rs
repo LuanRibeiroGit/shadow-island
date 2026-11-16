@@ -25,16 +25,40 @@ pub enum OverlayPlacement {
     Taskbar,
 }
 
+/// Horizontal alignment of a strip narrower than the work area.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum OverlayAlign {
+    Left,
+    #[default]
+    Center,
+    Right,
+}
+
 /// Compute the overlay strip rectangle from the monitor rectangle and its work area
 /// (monitor minus panels/taskbar). The strip hugs the edge of the work area that is
 /// next to the taskbar, spans the work-area width (optionally narrowed) and has the
 /// requested height.
+#[cfg(test)]
 pub fn overlay_rect(monitor: Rect, work_area: Option<Rect>, placement: OverlayPlacement, height: u32, width_fraction: f32) -> Rect {
+    overlay_rect_fit(monitor, work_area, placement, height, width_fraction, None, OverlayAlign::Center)
+}
+
+/// Like [`overlay_rect`], but `content_width` (when set) makes the strip only as wide
+/// as the characters it shows, aligned left/center/right.
+#[allow(clippy::too_many_arguments)]
+pub fn overlay_rect_fit(monitor: Rect, work_area: Option<Rect>, placement: OverlayPlacement, height: u32, width_fraction: f32, content_width: Option<u32>, align: OverlayAlign) -> Rect {
     let wa = work_area.filter(|w| w.width > 0 && w.height > 0).unwrap_or(monitor);
     let height = height.min(wa.height).max(32);
-    let frac = width_fraction.clamp(0.2, 1.0);
-    let width = ((wa.width as f32) * frac).round() as u32;
-    let x = wa.x + ((wa.width - width) / 2) as i32;
+    let width = match content_width {
+        Some(w) => w.clamp(48, wa.width),
+        None => ((wa.width as f32) * width_fraction.clamp(0.2, 1.0)).round() as u32,
+    };
+    let x = match align {
+        OverlayAlign::Left => wa.x,
+        OverlayAlign::Center => wa.x + ((wa.width - width) / 2) as i32,
+        OverlayAlign::Right => wa.x + (wa.width - width) as i32,
+    };
     let y = match placement {
         OverlayPlacement::Bottom => wa.y + wa.height as i32 - height as i32,
         OverlayPlacement::Top => wa.y,
@@ -48,6 +72,17 @@ mod tests {
     use super::*;
 
     const MON: Rect = Rect { x: 0, y: 0, width: 1920, height: 1080 };
+
+    #[test]
+    fn fits_the_characters() {
+        let wa = Rect { x: 0, y: 0, width: 1920, height: 1040 };
+        let r = overlay_rect_fit(MON, Some(wa), OverlayPlacement::Bottom, 52, 1.0, Some(180), OverlayAlign::Right);
+        assert_eq!(r, Rect { x: 1740, y: 988, width: 180, height: 52 });
+        let r = overlay_rect_fit(MON, Some(wa), OverlayPlacement::Bottom, 52, 1.0, Some(180), OverlayAlign::Left);
+        assert_eq!(r.x, 0);
+        let r = overlay_rect_fit(MON, Some(wa), OverlayPlacement::Bottom, 52, 1.0, Some(5000), OverlayAlign::Center);
+        assert_eq!(r.width, 1920);
+    }
 
     #[test]
     fn sits_above_bottom_taskbar() {
