@@ -135,6 +135,7 @@ export function createDemoBackend(): Backend {
     integrationApply: () => reject("Instalar a integração"),
     showCastle: async () => {},
     setOverlayVisible: async () => {},
+    listMonitors: async () => [],
     setOverlayHitboxes: async () => {},
     quit: async () => {},
     onUpdates: async (cb) => {

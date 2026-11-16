@@ -712,6 +712,8 @@ TD_TILES = [
     "desk", "bookshelf", "anvil", "forge0", "forge1", "cauldron0", "cauldron1", "throne",
     "telescope", "chest", "gold", "map_table", "barrel", "crystal", "candles", "torch0",
     "torch1", "rack", "stool", "window", "zz", "rug",
+    "floor_check", "runner", "table_l", "table_m", "table_r", "table_book", "table_candle", "table_map",
+    "table_flask", "chair_n", "chair_s", "bench", "plant", "pillar", "statue", "banner", "window_lit",
 ]
 
 
@@ -901,6 +903,123 @@ def td_tile(name: str) -> Image.Image:
         for x in (3, 7, 11):
             c.line(x, 1, x + 1, 14, hexrgb("#b8c4c8"))
             c.px(x, 1, gold)
+    elif name == "floor_check":
+        # Pale and dark flagstones in a checker pattern.
+        light, dark = hexrgb("#3c4947"), hexrgb("#323d3c")
+        for (x0, y0, col) in ((0, 0, light), (8, 0, dark), (0, 8, dark), (8, 8, light)):
+            c.rect(x0, y0, 8, 8, col)
+            c.rect(x0, y0, 8, 1, hexrgb("#45524f") if col == light else hexrgb("#3a4644"))
+            c.rect(x0 + 7, y0, 1, 8, hexrgb("#2b3534"))
+            c.rect(x0, y0 + 7, 8, 1, hexrgb("#2b3534"))
+        for _ in range(3):
+            c.px(rnd.randrange(16), rnd.randrange(16), hexrgb("#4a5856"))
+    elif name == "runner":
+        c.rect(0, 0, 16, 16, hexrgb("#8a2f2a"))
+        c.rect(0, 0, 16, 1, hexrgb("#a33a33"))
+        for x in range(1, 16, 4):
+            c.px(x, 7, hexrgb("#c9a45a"))
+            c.px(x + 2, 15, hexrgb("#6e2420"))
+        c.px(7, 3, hexrgb("#a33a33"))
+        c.px(11, 11, hexrgb("#a33a33"))
+    elif name in ("table_l", "table_m", "table_r", "table_book", "table_candle", "table_map", "table_flask"):
+        top, edge = hexrgb("#8a5a36"), hexrgb("#5a3a22")
+        x0 = 2 if name == "table_l" else 0
+        x1 = 14 if name == "table_r" else 16
+        c.ellipse(8, 14, 8, 2, (0, 0, 0, 70))
+        c.rect(x0, 3, x1 - x0, 9, top)
+        c.rect(x0, 3, x1 - x0, 1, hexrgb("#a8744a"))
+        c.rect(x0, 11, x1 - x0, 2, edge)
+        c.rect(x0, 5, x1 - x0, 5, hexrgb("#e9e4d4"))  # cloth runner
+        c.rect(x0, 9, x1 - x0, 1, hexrgb("#c9c2ad"))
+        if name == "table_l":
+            c.rect(2, 13, 1, 2, edge)
+        if name == "table_r":
+            c.rect(13, 13, 1, 2, edge)
+        if name == "table_book":
+            c.rect(4, 4, 8, 5, hexrgb("#7a3b3b"))
+            c.rect(5, 5, 3, 3, hexrgb("#f2ecd8"))
+            c.rect(8, 5, 3, 3, hexrgb("#e6dfc8"))
+        elif name == "table_candle":
+            c.rect(7, 2, 2, 5, hexrgb("#e8e2cf"))
+            c.px(7, 1, hexrgb("#ffd28a"))
+            c.px(8, 1, hexrgb("#fff0b8"))
+            c.ellipse(8, 3, 6, 5, (255, 210, 140, 35))
+            c.ellipse(4, 7, 1.6, 1.2, gold)
+            c.ellipse(12, 7, 1.6, 1.2, gold)
+        elif name == "table_map":
+            c.rect(2, 4, 12, 6, hexrgb("#e6d9b0"))
+            c.line(3, 8, 12, 5, hexrgb("#8a4b3b"))
+            c.px(12, 5, hexrgb("#c23b3b"))
+            c.ellipse(6, 7, 1, 1, gold)
+        elif name == "table_flask":
+            for x, col in ((4, "#6fdc8c"), (8, "#7cc8f2"), (12, "#d07ce8")):
+                c.rect(x - 1, 4, 2, 2, hexrgb("#c8d8d8"))
+                c.ellipse(x, 7, 1.8, 1.6, hexrgb(col))
+                c.px(x - 1, 6, hexrgb("#ffffff"))
+    elif name in ("chair_n", "chair_s"):
+        red, red_d = hexrgb("#9a2f2f"), hexrgb("#6a1f22")
+        c.ellipse(8, 13, 5, 1.5, (0, 0, 0, 60))
+        if name == "chair_n":  # seen from behind, above a table
+            c.rect(4, 4, 8, 5, wood_d)
+            c.rect(5, 5, 6, 3, red)
+            c.rect(4, 9, 8, 4, red_d)
+            c.rect(4, 13, 1, 1, wood_d)
+            c.rect(11, 13, 1, 1, wood_d)
+        else:
+            c.rect(4, 3, 8, 5, red_d)
+            c.rect(4, 8, 8, 3, red)
+            c.rect(4, 8, 8, 1, hexrgb("#b84040"))
+            c.rect(4, 11, 1, 3, wood_d)
+            c.rect(11, 11, 1, 3, wood_d)
+    elif name == "bench":
+        c.ellipse(8, 13, 7, 2, (0, 0, 0, 70))
+        c.rect(1, 3, 14, 5, hexrgb("#6a1f22"))
+        c.rect(1, 7, 14, 4, hexrgb("#9a2f2f"))
+        c.rect(1, 7, 14, 1, hexrgb("#b84040"))
+        c.rect(0, 4, 2, 8, hexrgb("#5a1a1d"))
+        c.rect(14, 4, 2, 8, hexrgb("#5a1a1d"))
+        c.rect(1, 11, 14, 2, wood_d)
+    elif name == "plant":
+        c.ellipse(8, 14, 4, 1.5, (0, 0, 0, 80))
+        c.rect(5, 9, 6, 5, hexrgb("#7a4a2a"))
+        c.rect(5, 9, 6, 1, hexrgb("#9a6238"))
+        for (x, y, r) in ((8, 5, 3.5), (5, 6, 2.5), (11, 6, 2.5), (8, 3, 2)):
+            c.ellipse(x, y, r, r * 0.9, hexrgb("#2f6b3a"))
+        for _ in range(6):
+            c.px(4 + rnd.randrange(9), 2 + rnd.randrange(6), hexrgb("#4f9a52"))
+        c.px(7, 4, hexrgb("#d77ad8"))
+        c.px(10, 5, hexrgb("#7cf2c2"))
+    elif name == "pillar":
+        c.ellipse(8, 14, 6, 2, (0, 0, 0, 90))
+        c.rect(3, 11, 10, 4, hexrgb("#5a6866"))
+        c.rect(4, 0, 8, 12, hexrgb("#6e7d7a"))
+        c.rect(4, 0, 2, 12, hexrgb("#8a9a96"))
+        c.rect(10, 0, 2, 12, hexrgb("#4f5c5a"))
+        c.rect(3, 11, 10, 1, hexrgb("#8a9a96"))
+    elif name == "statue":
+        c.ellipse(8, 14, 6, 2, (0, 0, 0, 90))
+        c.rect(3, 11, 10, 4, hexrgb("#4f5c5a"))
+        c.rect(3, 11, 10, 1, hexrgb("#6e7d7a"))
+        c.ellipse(8, 7, 3.5, 4.5, hexrgb("#7b8b88"))  # hooded figure
+        c.ellipse(8, 3, 2.6, 2.4, hexrgb("#8fa09c"))
+        c.rect(7, 3, 1, 1, glow)
+        c.rect(9, 3, 1, 1, glow)
+    elif name == "banner":
+        c.img.paste(td_tile("wall_face"), (0, 0))
+        c.rect(4, 4, 8, 1, gold)
+        c.rect(5, 5, 6, 9, hexrgb("#8a2f2a"))
+        c.rect(5, 5, 1, 9, hexrgb("#a33a33"))
+        c.px(5, 14, hexrgb("#8a2f2a"))
+        c.px(10, 14, hexrgb("#8a2f2a"))
+        c.rect(7, 8, 2, 3, glow)
+    elif name == "window_lit":
+        c.img.paste(td_tile("wall_face"), (0, 0))
+        c.rect(5, 6, 6, 8, hexrgb("#e8a24a"))
+        c.rect(6, 5, 4, 1, hexrgb("#e8a24a"))
+        c.rect(7, 6, 2, 8, hexrgb("#ffd28a"))
+        c.rect(5, 9, 6, 1, stone_d)
+        c.rect(7, 6, 1, 8, stone_d)
+        c.ellipse(8, 10, 7, 6, (255, 190, 110, 30))
     elif name == "stool":
         c.ellipse(8, 9, 3.5, 3, wood_d)
         c.ellipse(8, 8, 3, 2.5, wood_l)

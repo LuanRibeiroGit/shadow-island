@@ -7,11 +7,11 @@ import type { ActivityCategory, AgentState, Room } from "@ids/shared";
  * the renderer only draws what this module decides.
  */
 
-export const MAP_W = 32;
-export const MAP_H = 21;
+export const MAP_W = 64;
+export const MAP_H = 38;
 export const TILE_PX = 16;
 
-export type Floor = "floor_stone" | "floor_wood" | "carpet" | "rug";
+export type Floor = "floor_stone" | "floor_wood" | "floor_check" | "carpet" | "runner" | "rug";
 
 export interface Point {
   x: number;
@@ -34,100 +34,153 @@ export interface Prop {
   y: number;
   /** Minimum restoration level (real completed missions) for it to appear. */
   min?: number;
-  /** Props block walking unless flagged. */
+  /** Props block walking unless flagged (rugs, chairs agents sit on). */
   walkable?: boolean;
 }
 
-const TOP_Y = 1;
-const TOP_H = 7;
-const HALL_Y = 9;
-const HALL_H = 3;
-const BOTTOM_Y = 13;
-const BOTTOM_H = 7;
-
+/*
+ * Layout (tiles). Top wing: library, throne room, treasury, watchtower. A long
+ * gallery with a red runner crosses the castle; a second runner goes from the
+ * throne down to the south hall. Bottom wing: forge, laboratory, south hall and
+ * the dormitory with the beds.
+ */
 export const AREAS: RoomArea[] = [
-  { room: "library", x: 1, y: TOP_Y, w: 7, h: TOP_H, floor: "floor_wood" },
-  { room: "throne", x: 9, y: TOP_Y, w: 7, h: TOP_H, floor: "carpet" },
-  { room: "treasury", x: 17, y: TOP_Y, w: 7, h: TOP_H, floor: "floor_stone" },
-  { room: "watchtower", x: 25, y: TOP_Y, w: 6, h: TOP_H, floor: "floor_stone" },
-  { room: "hall", x: 1, y: HALL_Y, w: 30, h: HALL_H, floor: "floor_stone" },
-  { room: "forge", x: 1, y: BOTTOM_Y, w: 9, h: BOTTOM_H, floor: "floor_stone" },
-  { room: "laboratory", x: 11, y: BOTTOM_Y, w: 9, h: BOTTOM_H, floor: "floor_stone" },
-  { room: "barracks", x: 21, y: BOTTOM_Y, w: 10, h: BOTTOM_H, floor: "floor_wood" },
+  { room: "library", x: 1, y: 2, w: 16, h: 12, floor: "floor_wood" },
+  { room: "throne", x: 19, y: 2, w: 22, h: 12, floor: "floor_check" },
+  { room: "treasury", x: 43, y: 2, w: 12, h: 12, floor: "floor_wood" },
+  { room: "watchtower", x: 57, y: 2, w: 6, h: 12, floor: "floor_stone" },
+  { room: "hall", x: 1, y: 16, w: 62, h: 4, floor: "floor_check" },
+  { room: "forge", x: 1, y: 22, w: 12, h: 14, floor: "floor_stone" },
+  { room: "laboratory", x: 14, y: 22, w: 12, h: 14, floor: "floor_stone" },
+  { room: "hall", x: 27, y: 22, w: 6, h: 14, floor: "floor_check" },
+  { room: "barracks", x: 34, y: 22, w: 29, h: 14, floor: "floor_wood" },
 ];
 
-/** Openings in the walls between rooms and the hall. */
-export const DOORS: Point[] = [
-  { x: 4, y: 8 },
-  { x: 12, y: 8 },
-  { x: 20, y: 8 },
-  { x: 27, y: 8 },
-  { x: 5, y: 12 },
-  { x: 15, y: 12 },
-  { x: 25, y: 12 },
+interface Opening {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  floor?: Floor;
+}
+
+/** Openings through the walls (2 tiles thick between the wings and the gallery). */
+const OPENINGS: Opening[] = [
+  { x: 8, y: 14, w: 2, h: 2 },
+  { x: 28, y: 14, w: 4, h: 2, floor: "floor_check" },
+  { x: 48, y: 14, w: 2, h: 2 },
+  { x: 59, y: 14, w: 2, h: 2 },
+  { x: 6, y: 20, w: 2, h: 2 },
+  { x: 19, y: 20, w: 2, h: 2 },
+  { x: 27, y: 20, w: 6, h: 2, floor: "floor_check" },
+  { x: 40, y: 20, w: 2, h: 2 },
+  { x: 55, y: 20, w: 2, h: 2 },
+  { x: 26, y: 28, w: 1, h: 2 },
+  { x: 33, y: 28, w: 1, h: 2 },
 ];
+
+/** Door tiles (every tile of every opening). */
+export const DOORS: Point[] = OPENINGS.flatMap((o) => {
+  const out: Point[] = [];
+  for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) out.push({ x, y });
+  return out;
+});
+
+/** Red runners laid over the floors: the cross from the throne to the south hall. */
+const RUNNERS: Opening[] = [
+  { x: 29, y: 3, w: 2, h: 33 },
+  { x: 2, y: 17, w: 60, h: 2 },
+];
+
+const row = (tile: string, xs: number[], y: number, extra: Partial<Prop> = {}): Prop[] => xs.map((x) => ({ tile, x, y, ...extra }));
+const range = (a: number, b: number, step = 1) => Array.from({ length: Math.floor((b - a) / step) + 1 }, (_, i) => a + i * step);
+/** A long table from x0 to x1 (inclusive) with chairs above and below. */
+function table(x0: number, x1: number, y: number, top = "table_m"): Prop[] {
+  return [
+    { tile: "table_l", x: x0, y },
+    ...range(x0 + 1, x1 - 1).map((x, i) => ({ tile: i % 2 === 1 ? top : "table_m", x, y })),
+    { tile: "table_r", x: x1, y },
+    ...row("chair_n", range(x0, x1, 2), y - 1, { walkable: true }),
+    ...row("chair_s", range(x0, x1, 2), y + 1, { walkable: true }),
+  ];
+}
 
 export const PROPS: Prop[] = [
-  // Library: shelves on the back wall, reading desks.
-  ...[1, 2, 3, 5, 6, 7].map((x) => ({ tile: "bookshelf", x, y: 1 })),
-  { tile: "desk", x: 2, y: 4 },
-  { tile: "desk", x: 5, y: 4 },
-  { tile: "candles", x: 7, y: 6, min: 1 },
-  { tile: "stool", x: 2, y: 5, walkable: true },
-  // Throne room.
-  { tile: "throne", x: 12, y: 2 },
-  { tile: "candles", x: 10, y: 1 },
-  { tile: "candles", x: 14, y: 1 },
-  { tile: "crystal", x: 9, y: 7, min: 3 },
-  { tile: "crystal", x: 15, y: 7, min: 3 },
-  // Treasury.
-  { tile: "chest", x: 17, y: 1 },
-  { tile: "chest", x: 23, y: 1 },
-  { tile: "map_table", x: 20, y: 3 },
-  { tile: "gold", x: 18, y: 6, min: 4 },
-  { tile: "gold", x: 22, y: 6, min: 4 },
-  { tile: "gold", x: 20, y: 1, min: 5 },
+  // Library: shelves on the back wall, two rows of long reading tables.
+  ...row("bookshelf", [...range(1, 7), ...range(10, 16)], 2),
+  ...table(3, 7, 6, "table_book"),
+  ...table(10, 14, 6, "table_candle"),
+  ...table(3, 7, 10, "table_candle"),
+  ...table(10, 14, 10, "table_book"),
+  ...row("plant", [1, 16], 13),
+  // Throne room: throne at the head of the runner, pillars, benches, braziers.
+  { tile: "throne", x: 29, y: 2 },
+  { tile: "throne", x: 30, y: 2 },
+  ...row("candles", [27, 32], 2),
+  ...row("plant", [19, 40], 2),
+  ...row("pillar", [23, 36], 4),
+  ...row("pillar", [23, 36], 8),
+  ...row("pillar", [23, 36], 12),
+  ...row("bench", [19, 19, 19], 5).map((p, i) => ({ ...p, y: 5 + i * 3 })),
+  ...row("bench", [40, 40, 40], 5).map((p, i) => ({ ...p, y: 5 + i * 3 })),
+  ...row("crystal", [26, 33], 3, { min: 3 }),
+  ...row("statue", [21, 38], 2, { min: 2 }),
+  // Treasury: chests on the wall, a long ledger table, gold piles.
+  ...row("chest", [44, 46, 51, 53], 2),
+  ...table(45, 52, 7, "table_map"),
+  ...row("gold", [43, 54], 12, { min: 4 }),
+  ...row("gold", [48, 49], 2, { min: 5 }),
+  ...row("barrel", [43, 54], 3),
   // Watchtower.
-  { tile: "telescope", x: 28, y: 2 },
-  { tile: "map_table", x: 26, y: 5 },
-  { tile: "barrel", x: 30, y: 7 },
-  // Hall.
-  ...[3, 8, 13, 18, 23, 28].map((x) => ({ tile: "rug", x, y: 10, walkable: true, min: 2 })),
+  { tile: "telescope", x: 60, y: 3 },
+  { tile: "map_table", x: 59, y: 8 },
+  ...row("barrel", [57, 62], 13),
+  // Gallery: plants and benches along the walls (never in front of a door).
+  ...row("plant", [3, 14, 24, 35, 45, 53, 62], 16),
+  ...row("bench", [11, 12, 37, 38, 51], 16),
+  ...row("plant", [3, 15, 24, 36, 47, 61], 19),
+  ...row("bench", [10, 11, 44, 45, 52, 53], 19),
+  ...row("rug", [5, 22, 36, 52], 17, { walkable: true, min: 2 }),
   // Forge.
-  { tile: "forge", x: 2, y: 13 },
-  { tile: "forge", x: 6, y: 13 },
-  { tile: "anvil", x: 3, y: 16 },
-  { tile: "anvil", x: 7, y: 16 },
-  { tile: "rack", x: 9, y: 13 },
-  { tile: "barrel", x: 1, y: 19 },
-  { tile: "barrel", x: 9, y: 19 },
+  ...row("forge", [2, 6, 10], 22),
+  ...row("anvil", [3, 8], 26),
+  ...row("anvil", [3, 8], 30),
+  { tile: "rack", x: 12, y: 22 },
+  { tile: "rack", x: 12, y: 30 },
+  ...row("barrel", [1, 12], 35),
+  { tile: "barrel", x: 1, y: 34 },
   // Laboratory.
-  { tile: "cauldron", x: 13, y: 14 },
-  { tile: "cauldron", x: 17, y: 14 },
-  { tile: "crystal", x: 19, y: 13, min: 3 },
-  { tile: "desk", x: 12, y: 18 },
-  { tile: "bookshelf", x: 11, y: 13 },
-  // Barracks: beds are separate (see BEDS).
-  { tile: "rack", x: 30, y: 19 },
-  { tile: "barrel", x: 21, y: 19 },
+  ...row("bookshelf", [14, 15, 24, 25], 22),
+  ...row("cauldron", [17, 22], 25),
+  ...table(16, 22, 30, "table_flask"),
+  ...row("crystal", [14, 25], 35, { min: 3 }),
+  // South hall.
+  ...row("pillar", [27, 32], 24),
+  ...row("pillar", [27, 32], 30),
+  ...row("plant", [27, 32], 35),
+  ...row("statue", [27, 32], 27, { min: 2 }),
+  // Dormitory: beds are separate (see BEDS); chests at the foot of the rows.
+  ...row("chest", [35, 62], 35),
+  ...row("rack", [62], 22),
+  ...row("plant", [34], 22),
 ];
 
-/** Bed tiles (in the barracks). Agents sleep here when idle. */
-export const BEDS: Point[] = [
-  ...[22, 24, 26, 28, 30].map((x) => ({ x, y: 13 })),
-  ...[22, 24, 26, 28, 30].map((x) => ({ x, y: 16 })),
-  ...[23, 25, 27].map((x) => ({ x, y: 19 })),
-];
+const BED_XS = [36, 38, 43, 45, 47, 49, 51, 53, 58, 60];
+/** Bed tiles (in the dormitory). Agents sleep here when idle. */
+export const BEDS: Point[] = [22, 26, 30].flatMap((y) => BED_XS.map((x) => ({ x, y })));
 
-/** Where an agent stands to work in each room (in front of the furniture). */
+/** Where an agent with no free bed naps. */
+export const NAP_SPOT: Point = { x: 48, y: 34 };
+
+/** Where an agent stands to work in each room (chairs, in front of the furniture). */
 export const STATIONS: Record<Room, Point[]> = {
-  library: [{ x: 2, y: 5 }, { x: 5, y: 5 }, { x: 3, y: 2 }, { x: 6, y: 2 }, { x: 4, y: 6 }, { x: 1, y: 6 }],
-  throne: [{ x: 11, y: 4 }, { x: 13, y: 4 }, { x: 12, y: 5 }, { x: 10, y: 6 }, { x: 14, y: 6 }, { x: 12, y: 7 }],
-  treasury: [{ x: 19, y: 3 }, { x: 21, y: 3 }, { x: 17, y: 2 }, { x: 23, y: 2 }, { x: 20, y: 5 }, { x: 18, y: 4 }],
-  watchtower: [{ x: 28, y: 3 }, { x: 26, y: 6 }, { x: 27, y: 5 }, { x: 29, y: 4 }, { x: 25, y: 3 }, { x: 30, y: 5 }],
-  forge: [{ x: 2, y: 14 }, { x: 6, y: 14 }, { x: 3, y: 17 }, { x: 7, y: 17 }, { x: 5, y: 15 }, { x: 4, y: 18 }],
-  laboratory: [{ x: 13, y: 15 }, { x: 17, y: 15 }, { x: 15, y: 16 }, { x: 12, y: 17 }, { x: 19, y: 14 }, { x: 15, y: 18 }],
-  barracks: [{ x: 23, y: 15 }, { x: 27, y: 15 }, { x: 25, y: 18 }, { x: 29, y: 18 }],
+  library: [{ x: 3, y: 5 }, { x: 5, y: 7 }, { x: 10, y: 5 }, { x: 12, y: 7 }, { x: 5, y: 9 }, { x: 12, y: 11 }, { x: 7, y: 11 }, { x: 14, y: 9 }],
+  throne: [{ x: 28, y: 4 }, { x: 31, y: 4 }, { x: 25, y: 7 }, { x: 34, y: 7 }, { x: 28, y: 10 }, { x: 31, y: 10 }, { x: 20, y: 6 }, { x: 39, y: 6 }],
+  treasury: [{ x: 45, y: 6 }, { x: 47, y: 8 }, { x: 49, y: 6 }, { x: 51, y: 8 }, { x: 44, y: 3 }, { x: 52, y: 3 }],
+  watchtower: [{ x: 60, y: 4 }, { x: 59, y: 9 }, { x: 58, y: 5 }, { x: 61, y: 7 }, { x: 60, y: 11 }, { x: 58, y: 11 }],
+  forge: [{ x: 2, y: 23 }, { x: 6, y: 23 }, { x: 10, y: 23 }, { x: 4, y: 26 }, { x: 9, y: 26 }, { x: 4, y: 30 }, { x: 9, y: 30 }],
+  laboratory: [{ x: 17, y: 26 }, { x: 22, y: 26 }, { x: 16, y: 29 }, { x: 18, y: 31 }, { x: 20, y: 29 }, { x: 22, y: 31 }, { x: 16, y: 23 }],
+  barracks: [{ x: 40, y: 33 }, { x: 46, y: 33 }, { x: 52, y: 33 }, { x: 58, y: 33 }],
 };
 
 export type TileKind = "wall" | "floor" | "door";
@@ -158,11 +211,18 @@ export function buildMap(): CastleMap {
       }
     }
   }
-  for (const d of DOORS) {
-    kind[idx(d.x, d.y)] = "door";
-    floor[idx(d.x, d.y)] = "floor_stone";
-    roomAt[idx(d.x, d.y)] = "hall";
-    blocked[idx(d.x, d.y)] = false;
+  for (const o of OPENINGS) {
+    for (let y = o.y; y < o.y + o.h; y++) {
+      for (let x = o.x; x < o.x + o.w; x++) {
+        kind[idx(x, y)] = "door";
+        floor[idx(x, y)] = o.floor ?? "floor_stone";
+        roomAt[idx(x, y)] = "hall";
+        blocked[idx(x, y)] = false;
+      }
+    }
+  }
+  for (const r of RUNNERS) {
+    for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) if (kind[idx(x, y)] !== "wall") floor[idx(x, y)] = "runner";
   }
   for (const p of PROPS) if (!p.walkable) blocked[idx(p.x, p.y)] = true;
   for (const b of BEDS) blocked[idx(b.x, b.y)] = true;

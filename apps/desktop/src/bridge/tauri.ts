@@ -29,6 +29,7 @@ export function createTauriBackend(): Backend {
     integrationApply: (action, expectedAfter) => invoke("integration_apply", { action, expectedAfter }),
     showCastle: (route) => invoke("show_castle", { route: route ?? null }),
     setOverlayVisible: (visible) => invoke("set_overlay_visible", { visible }),
+    listMonitors: () => invoke("list_monitors"),
     setOverlayHitboxes: (boxes) => invoke("set_overlay_hitboxes", { boxes }),
     quit: () => invoke("quit_app"),
     onUpdates: (cb) => on<Update[]>("ids://updates", cb),

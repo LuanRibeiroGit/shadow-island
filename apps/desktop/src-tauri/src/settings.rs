@@ -70,7 +70,7 @@ pub struct Desktop {
 
 impl Default for Desktop {
     fn default() -> Self {
-        Self { overlay_enabled: true, placement: OverlayPlacement::Bottom, height: 76, width_fraction: 1.0, monitor: None, prefer_x11_on_wayland: true }
+        Self { overlay_enabled: true, placement: OverlayPlacement::Bottom, height: 72, width_fraction: 1.0, monitor: None, prefer_x11_on_wayland: true }
     }
 }
 
@@ -105,13 +105,13 @@ mod tests {
         let s = parse(&json!({"claude": {"keepPromptExcerpt": false}, "theme": {"x": 1}}));
         assert!(!s.claude.keep_prompt_excerpt);
         assert!(s.claude.integration_enabled);
-        assert_eq!(s.desktop.height, 76);
+        assert_eq!(s.desktop.height, 72);
     }
 
     #[test]
     fn invalid_values_fall_back() {
         let s = parse(&json!({"desktop": {"height": "tall"}}));
-        assert_eq!(s.desktop.height, 76);
+        assert_eq!(s.desktop.height, 72);
         assert!(validate(&json!([1])).is_err());
     }
 }

@@ -839,7 +839,7 @@
     "castle-topdown": {
       "image": "environments/castle-topdown.png",
       "width": 128,
-      "height": 64,
+      "height": 96,
       "tileSize": 16,
       "columns": 8,
       "tiles": {
@@ -872,7 +872,24 @@
         "stool": 26,
         "window": 27,
         "zz": 28,
-        "rug": 29
+        "rug": 29,
+        "floor_check": 30,
+        "runner": 31,
+        "table_l": 32,
+        "table_m": 33,
+        "table_r": 34,
+        "table_book": 35,
+        "table_candle": 36,
+        "table_map": 37,
+        "table_flask": 38,
+        "chair_n": 39,
+        "chair_s": 40,
+        "bench": 41,
+        "plant": 42,
+        "pillar": 43,
+        "statue": 44,
+        "banner": 45,
+        "window_lit": 46
       }
     }
   },

@@ -13,7 +13,6 @@ import { QualityBadge } from "../components/Stat";
 import { EVENT_LABEL, MISSION_CLASS, MISSION_LABEL, ROOM_LABEL, STATE_CLASS, STATE_LABEL, fmtTime, timeAgo } from "../components/labels";
 import { CastleScene } from "./scene";
 import { restorationLevel, RESTORATION_LABEL, RESTORATION_THRESHOLDS } from "./layout";
-import { CASTLE_H, CASTLE_W } from "./scene";
 import { useT } from "../i18n";
 
 const ROOM_BLURB: Record<Room, string> = {
@@ -30,7 +29,7 @@ export function CastlePage({ room }: { room?: string }) {
   const host = useRef<HTMLDivElement>(null);
   const scene = useRef<CastleScene | null>(null);
   const [ready, setReady] = useState(false);
-  const [scale, setScale] = useState(2);
+  const [zoom, setZoom] = useState<{ zoom: number; fit: number }>({ zoom: 1, fit: 1 });
   const [completed, setCompleted] = useState<number | null>(null);
   const world = useWorld((s) => s.world);
   const settings = useSettings((s) => s.settings);
@@ -43,22 +42,10 @@ export function CastlePage({ room }: { room?: string }) {
     scene.current = s;
     s.onRoom = (r) => go({ page: "castle", room: r });
     s.onAgent = (id) => go({ page: "agent", agentId: id });
+    s.onZoom = (z, fit) => setZoom({ zoom: z, fit });
     void s.init(host.current!).then(() => setReady(true));
     return () => s.destroy();
   }, [go]);
-
-  // Integer scaling keeps pixels crisp; below 2x we fit the space instead so the
-  // castle is never stuck at a tiny 1x on mid-size windows.
-  useEffect(() => {
-    const el = host.current?.parentElement;
-    if (!el) return;
-    const ro = new ResizeObserver(() => {
-      const k = Math.min(el.clientWidth / CASTLE_W, el.clientHeight / CASTLE_H);
-      setScale(k >= 2 ? Math.floor(k) : k);
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
 
   // Restoration level from real completed missions.
   const finishedCount = Object.values(world.missions).filter((m) => m.status === "completed").length;
@@ -82,7 +69,13 @@ export function CastlePage({ room }: { room?: string }) {
   return (
     <div className="castle-layout">
       <div className="castle-stage" data-testid="castle-stage">
-        <div ref={host} style={{ width: CASTLE_W * scale, height: CASTLE_H * scale }} className="castle-canvas-host" />
+        <div ref={host} className="castle-canvas-host" />
+        <div className="castle-zoom" role="toolbar" aria-label="Câmera do castelo">
+          <button className="btn" title="Aproximar" aria-label="Aproximar" onClick={() => scene.current?.zoomAt(1.4)}>+</button>
+          <span className="mono faint">{Math.round((zoom.zoom / zoom.fit) * 100)}%</span>
+          <button className="btn" title="Afastar" aria-label="Afastar" onClick={() => scene.current?.zoomAt(1 / 1.4)}>−</button>
+          <button className="btn" title="Ver o castelo inteiro" onClick={() => scene.current?.resetView()}>Ver tudo</button>
+        </div>
         <div className="room-hint">
           {RESTORATION_LABEL[level]}
           {completed !== null && level < RESTORATION_THRESHOLDS.length - 1 && ` · ${completed}/${RESTORATION_THRESHOLDS[level + 1]} missões para restaurar mais o castelo`}

@@ -206,6 +206,7 @@ pub fn run() {
             commands::window::set_overlay_visible,
             commands::window::set_overlay_hitboxes,
             commands::window::overlay_info,
+            commands::window::list_monitors,
             commands::window::quit_app,
             commands::system::get_settings,
             commands::system::save_settings,

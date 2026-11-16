@@ -43,6 +43,23 @@ pub fn overlay_info(app: AppHandle, state: State<'_, AppState>) -> CmdResult<ser
     }))
 }
 
+/// Monitors the overlay can be placed on (name, size and whether it is the primary one).
+#[tauri::command]
+pub fn list_monitors(app: AppHandle) -> CmdResult<Vec<serde_json::Value>> {
+    let w = app.get_webview_window(windows::CASTLE).or_else(|| app.get_webview_window(windows::OVERLAY)).ok_or("no window")?;
+    let primary = w.primary_monitor().ok().flatten().and_then(|m| m.name().cloned());
+    Ok(w
+        .available_monitors()
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|m| {
+            let name = m.name()?.clone();
+            let s = m.size();
+            Some(serde_json::json!({ "name": name, "width": s.width, "height": s.height, "primary": primary.as_deref() == Some(name.as_str()) }))
+        })
+        .collect())
+}
+
 #[tauri::command]
 pub fn quit_app(app: AppHandle) {
     windows::quit(&app);

@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import type { IntegrationInfo } from "@ids/shared";
+import { backend, type MonitorInfo } from "../bridge/backend";
 import { useSettings } from "../stores/settings";
 import { useUi } from "../stores/ui";
 import { IntegrationSection } from "./IntegrationSection";
@@ -68,13 +70,27 @@ function GeneralSection() {
 function DesktopSection() {
   const [d, set] = useSection("desktop");
   const [audio, setAudio] = useSection("audio");
+  const [monitors, setMonitors] = useState<MonitorInfo[]>([]);
+  useEffect(() => {
+    void backend().then((b) => b.listMonitors()).then(setMonitors).catch(() => setMonitors([]));
+  }, []);
   return (
     <>
       <section className="card px-frame">
         <h3>Tripulação na área de trabalho</h3>
         <Toggle label="Mostrar personagens perto da barra de tarefas" checked={d.overlayEnabled} onChange={(v) => set({ overlayEnabled: v })} />
         <div className="row" style={{ margin: "8px 0" }}>
-          <Select label="Posição" value={d.placement} onChange={(v) => set({ placement: v })} options={[{ value: "bottom", label: "Logo acima da barra de tarefas" }, { value: "taskbar", label: "Sobre a barra de tarefas (Windows, KDE, X11)" }, { value: "top", label: "Em cima" }]} />
+          <Select label="Posição" value={d.placement} onChange={(v) => set({ placement: v })} options={[{ value: "bottom", label: "Rodapé da tela (acima da barra, ou no lugar dela com a dock oculta)" }, { value: "taskbar", label: "Sobre a barra de tarefas (Windows, KDE, X11)" }, { value: "top", label: "Em cima" }]} />
+          <Select
+            label="Monitor"
+            value={d.monitor ?? ""}
+            onChange={(v) => set({ monitor: v === "" ? null : v })}
+            options={[
+              { value: "", label: "Tela principal do sistema" },
+              ...monitors.map((m) => ({ value: m.name, label: `${m.name} · ${m.width}×${m.height}${m.primary ? " (principal)" : ""}` })),
+              ...(d.monitor && !monitors.some((m) => m.name === d.monitor) ? [{ value: d.monitor, label: `${d.monitor} (desconectado)` }] : []),
+            ]}
+          />
         </div>
         <Range label="Altura da faixa" value={d.height} min={48} max={320} step={4} format={(v) => `${v}px`} onChange={(v) => set({ height: v })} />
         <Range label="Largura da faixa" value={d.widthFraction} min={0.2} max={1} step={0.05} format={(v) => `${Math.round(v * 100)}%`} onChange={(v) => set({ widthFraction: v })} />

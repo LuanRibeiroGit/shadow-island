@@ -48,6 +48,7 @@ export interface Backend {
 
   showCastle(route?: string): Promise<void>;
   setOverlayVisible(visible: boolean): Promise<void>;
+  listMonitors(): Promise<MonitorInfo[]>;
   setOverlayHitboxes(boxes: Rect[]): Promise<void>;
   quit(): Promise<void>;
 
@@ -70,4 +71,11 @@ export function backend(): Promise<Backend> {
         : Promise.reject(new Error("Ilha das Sombras precisa ser executada pelo aplicativo desktop."));
   }
   return instance;
+}
+
+export interface MonitorInfo {
+  name: string;
+  width: number;
+  height: number;
+  primary: boolean;
 }

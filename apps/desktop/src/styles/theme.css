@@ -252,7 +252,11 @@ button.link:hover { text-decoration: underline; }
 .swatch-input { width: 36px; height: 28px; padding: 0; border: 2px solid var(--line); background: none; cursor: pointer; }
 .char-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
 .logs { font-family: var(--mono); font-size: 11px; white-space: pre-wrap; max-height: 340px; overflow: auto; background: #050b0d; padding: 10px; border: 2px solid var(--line); }
-.castle-canvas-host canvas { width: 100% !important; height: 100% !important; max-width: none; max-height: none; image-rendering: pixelated; display: block; }
+.castle-canvas-host { position: absolute; inset: 0; }
+.castle-canvas-host canvas { max-width: none; max-height: none; image-rendering: pixelated; display: block; touch-action: none; cursor: grab; }
+.castle-zoom { position: absolute; top: 10px; right: 10px; display: flex; gap: 6px; align-items: center; background: #0b1416d9; padding: 6px; border: 2px solid var(--line); }
+.castle-zoom .btn { padding: 4px 10px; min-width: 32px; }
+.castle-zoom span { font-size: 12px; min-width: 42px; text-align: center; }
 label.field select { background: #0a1517; color: var(--text); border: 2px solid var(--line); padding: 5px 6px; font: inherit; font-size: 13px; }
 label.field select:focus { outline: none; border-color: var(--accent-dim); }
 input[type="range"] { accent-color: var(--accent-dim); }

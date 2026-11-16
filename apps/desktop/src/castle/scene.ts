@@ -1,7 +1,7 @@
 // Strict CSP (no unsafe-eval in the webview): Pixi must use its precompiled
 // shader/uniform paths.
 import "pixi.js/unsafe-eval";
-import { Application, Container, Graphics, Rectangle, Sprite, Texture, type TextureSource } from "pixi.js";
+import { Application, Container, Graphics, Rectangle, Sprite, Texture, type FederatedPointerEvent, type TextureSource } from "pixi.js";
 import type { Agent, Encounter, Room } from "@ids/shared";
 import {
   AREAS,
@@ -9,6 +9,7 @@ import {
   BedRegistry,
   MAP_H,
   MAP_W,
+  NAP_SPOT,
   PROPS,
   TILE_PX,
   bedsideOf,
@@ -36,6 +37,10 @@ export const CASTLE_H = MAP_H * TILE_PX;
 const ANIMATED = new Set(["forge", "cauldron"]);
 /** Walking speed in tiles per second. */
 const WALK_SPEED = 3.2;
+/** Characters are drawn at full sprite size (24 px on 16 px tiles). */
+const CHAR_SCALE = 1;
+const MIN_ZOOM = 0.5;
+const MAX_ZOOM = 6;
 /** How long a finished agent sleeps before fading away. */
 const LEAVE_AFTER_MS = 6000;
 
@@ -103,8 +108,21 @@ export class CastleScene {
   onRoom: (r: Room) => void = () => {};
   onAgent: (id: string) => void = () => {};
 
+  /** Camera: zoom and pan applied to `root`. `fit` is the zoom that shows the whole castle. */
+  private zoom = 1;
+  private fit = 1;
+  private userMoved = false;
+  private overview = false;
+  private drag: { x: number; y: number; rx: number; ry: number; moved: boolean } | null = null;
+  /** True right after a drag, so the release does not count as a click. */
+  private dragged = false;
+  private host: HTMLElement | null = null;
+  private ro: ResizeObserver | null = null;
+  onZoom: (zoom: number, fit: number) => void = () => {};
+
   async init(el: HTMLElement): Promise<void> {
-    await this.app.init({ width: CASTLE_W, height: CASTLE_H, background: "#050b0d", antialias: false, resolution: 1 });
+    this.host = el;
+    await this.app.init({ resizeTo: el, background: "#07090c", antialias: false, autoDensity: true, resolution: window.devicePixelRatio || 1, roundPixels: true });
     this.ready = true;
     if (this.destroyed) {
       this.app.destroy(true, { children: true });
@@ -119,11 +137,28 @@ export class CastleScene {
     this.app.ticker.add((t) => this.tick(t.deltaMS));
     document.addEventListener("visibilitychange", this.onVisibility);
 
-    // Clicks / hover on the floor select rooms.
+    // Clicks / hover on the floor select rooms; drag pans, wheel zooms.
     this.app.stage.eventMode = "static";
-    this.app.stage.hitArea = new Rectangle(0, 0, CASTLE_W, CASTLE_H);
+    this.app.stage.hitArea = this.app.screen;
+    this.app.stage.on("pointerdown", (e) => {
+      this.drag = { x: e.global.x, y: e.global.y, rx: this.root.x, ry: this.root.y, moved: false };
+      this.dragged = false;
+    });
+    this.app.stage.on("pointerup", () => this.endDrag());
+    this.app.stage.on("pointerupoutside", () => this.endDrag());
     this.app.stage.on("pointermove", (e) => {
-      const r = this.roomAtPx(e.global.x, e.global.y);
+      if (this.drag) {
+        const dx = e.global.x - this.drag.x;
+        const dy = e.global.y - this.drag.y;
+        if (!this.drag.moved && Math.hypot(dx, dy) > 4) this.drag.moved = true;
+        if (this.drag.moved) {
+          this.root.position.set(this.drag.rx + dx, this.drag.ry + dy);
+          this.userMoved = true;
+          this.clampCamera();
+          this.app.canvas.style.cursor = "grabbing";
+        }
+      }
+      const r = this.roomAtGlobal(e);
       if (r !== this.hover) {
         this.hover = r;
         this.drawHighlight();
@@ -134,9 +169,18 @@ export class CastleScene {
       this.drawHighlight();
     });
     this.app.stage.on("pointertap", (e) => {
-      const r = this.roomAtPx(e.global.x, e.global.y);
+      if (this.dragged) return;
+      const r = this.roomAtGlobal(e);
       if (r) this.onRoom(r);
     });
+    this.app.canvas.addEventListener("wheel", this.onWheel, { passive: false });
+    this.ro = new ResizeObserver(() => {
+      this.app.resize();
+      this.app.stage.hitArea = this.app.screen;
+      this.computeFit();
+    });
+    this.ro.observe(el);
+    this.computeFit();
 
     const m = await loadManifest();
     if (this.destroyed) return;
@@ -152,9 +196,72 @@ export class CastleScene {
     this.buildRooms(0);
   }
 
-  private roomAtPx(x: number, y: number): Room | null {
-    const r = roomOf(this.map, { x: Math.floor(x / TILE_PX), y: Math.floor(y / TILE_PX) });
+  private endDrag() {
+    this.dragged = this.drag?.moved ?? false;
+    this.drag = null;
+    this.app.canvas.style.cursor = "";
+  }
+
+  private roomAtGlobal(e: FederatedPointerEvent): Room | null {
+    const p = this.root.toLocal(e.global);
+    const r = roomOf(this.map, { x: Math.floor(p.x / TILE_PX), y: Math.floor(p.y / TILE_PX) });
     return r && r !== "hall" ? r : null;
+  }
+
+  private onWheel = (ev: WheelEvent) => {
+    ev.preventDefault();
+    const rect = this.app.canvas.getBoundingClientRect();
+    this.zoomAt(Math.exp(-ev.deltaY * 0.0015), ev.clientX - rect.left, ev.clientY - rect.top);
+  };
+
+  /** Zoom by `factor` keeping the point (sx, sy) of the screen fixed. */
+  zoomAt(factor: number, sx?: number, sy?: number) {
+    const w = this.app.screen.width;
+    const h = this.app.screen.height;
+    const cx = sx ?? w / 2;
+    const cy = sy ?? h / 2;
+    const next = Math.min(MAX_ZOOM, Math.max(Math.min(MIN_ZOOM, this.fit), this.zoom * factor));
+    const wx = (cx - this.root.x) / this.zoom;
+    const wy = (cy - this.root.y) / this.zoom;
+    this.zoom = next;
+    this.root.scale.set(next);
+    this.root.position.set(cx - wx * next, cy - wy * next);
+    this.userMoved = true;
+    this.clampCamera();
+    this.onZoom(this.zoom, this.fit);
+  }
+
+  /** Back to the whole castle, centered. */
+  resetView() {
+    this.userMoved = false;
+    this.overview = true;
+    this.computeFit();
+  }
+
+  private computeFit() {
+    const w = this.app.screen.width;
+    const h = this.app.screen.height;
+    if (!w || !h) return;
+    this.fit = Math.min(w / CASTLE_W, h / CASTLE_H);
+    if (!this.userMoved) {
+      // Open close enough to see the souls (2x, pixel-perfect), centered on the castle;
+      // "Ver tudo" fits the whole map.
+      this.zoom = this.overview ? this.fit : Math.max(this.fit, Math.min(2, MAX_ZOOM));
+      this.root.scale.set(this.zoom);
+      this.root.position.set(Math.round((w - CASTLE_W * this.zoom) / 2), Math.round((h - CASTLE_H * this.zoom) / 2));
+    }
+    this.clampCamera();
+    this.onZoom(this.zoom, this.fit);
+  }
+
+  /** Keep at least part of the castle on screen; center it on axes where it fits. */
+  private clampCamera() {
+    const w = this.app.screen.width;
+    const h = this.app.screen.height;
+    const cw = CASTLE_W * this.zoom;
+    const ch = CASTLE_H * this.zoom;
+    const clamp = (pos: number, view: number, size: number) => (size <= view ? (view - size) / 2 : Math.min(0, Math.max(view - size, pos)));
+    this.root.position.set(clamp(this.root.x, w, cw), clamp(this.root.y, h, ch));
   }
 
   private tex(name: string): Texture | null {
@@ -186,15 +293,15 @@ export class CastleScene {
       for (let x = 0; x < MAP_W; x++) {
         const i = y * MAP_W + x;
         const kind = this.map.kind[i];
-        if (kind === "floor") this.sprite(this.map.floor[i] ?? "floor_stone", x * TILE_PX, y * TILE_PX, this.groundLayer);
-        else if (kind === "door") this.sprite("door", x * TILE_PX, y * TILE_PX, this.groundLayer);
+        // Doorways are open passages: same floor as the rooms they join.
+        if (kind === "floor" || kind === "door") this.sprite(this.map.floor[i] ?? "floor_stone", x * TILE_PX, y * TILE_PX, this.groundLayer);
         else {
           const below = y + 1 < MAP_H ? this.map.kind[i + MAP_W] : "wall";
           if (below === "wall") this.sprite("wall", x * TILE_PX, y * TILE_PX, this.groundLayer);
           else {
             // Wall faces seen from above, with torches and windows here and there.
             n++;
-            const variant = n % 6 === 3 ? "torch" : n % 9 === 5 ? "window" : "wall_face";
+            const variant = n % 7 === 3 ? "torch" : n % 11 === 5 ? "window_lit" : n % 9 === 1 ? "banner" : n % 13 === 8 ? "window" : "wall_face";
             if (variant === "torch") {
               const s = this.sprite("torch0", x * TILE_PX, y * TILE_PX, this.groundLayer);
               if (s) this.animTiles.push({ sprite: s, base: "torch" });
@@ -282,7 +389,7 @@ export class CastleScene {
           this.goTo(actor, st, `${key}:${st.x},${st.y}`);
         }
       }
-      void actor.view.sync(a, custom, now, { scale: 0.5, ...opts, animation: this.animFor(actor, now) });
+      void actor.view.sync(a, custom, now, { scale: CHAR_SCALE, ...opts, animation: this.animFor(actor, now) });
     });
     for (const actor of this.actors.values()) if (actor.leavingSince !== null) this.goToBed(actor);
 
@@ -294,11 +401,11 @@ export class CastleScene {
   }
 
   private spawn(a: Agent, bed: Point | null): Actor {
-    const start = bed ?? { x: 25, y: 17 };
+    const start = bed ?? NAP_SPOT;
     const view = new CharacterView(a);
     view.on("pointertap", (e) => {
       e.stopPropagation();
-      this.onAgent(a.id);
+      if (!this.dragged) this.onAgent(a.id);
     });
     const sleeper = new Sprite(this.tex("sleeper") ?? Texture.EMPTY);
     const zz = new Sprite(this.tex("zz") ?? Texture.EMPTY);
@@ -306,7 +413,7 @@ export class CastleScene {
     sleeper.cursor = "pointer";
     sleeper.on("pointertap", (e) => {
       e.stopPropagation();
-      this.onAgent(a.id);
+      if (!this.dragged) this.onAgent(a.id);
     });
     this.sortLayer.addChild(view, sleeper);
     this.fxLayer.addChild(zz);
@@ -346,7 +453,7 @@ export class CastleScene {
   private goToBed(actor: Actor) {
     if (!actor.bed) {
       // No bed left: nap on the barracks floor.
-      this.goTo(actor, { x: 25, y: 17 }, "floor-nap");
+      this.goTo(actor, NAP_SPOT, "floor-nap");
       return;
     }
     if (actor.destKey === "bed") return;
@@ -419,7 +526,7 @@ export class CastleScene {
       const anim = this.animFor(actor, now);
       if (anim !== actor.lastAnim) {
         actor.lastAnim = anim;
-        void actor.view.sync(actor.agent, this.custom, now, { scale: 0.5, ...this.viewOpts, animation: anim });
+        void actor.view.sync(actor.agent, this.custom, now, { scale: CHAR_SCALE, ...this.viewOpts, animation: anim });
       }
       if (actor.phase === "sleeping") actor.zz.alpha = 0.55 + 0.45 * Math.sin(now / 500);
       this.place(actor);
@@ -429,7 +536,7 @@ export class CastleScene {
     for (const m of this.monsters.values()) {
       const a = this.actors.get(m.encounter.agentId);
       if (a) {
-        m.position.set(Math.round(a.pos.x + 14), Math.round(a.pos.y));
+        m.position.set(Math.round(a.pos.x + 20), Math.round(a.pos.y));
         m.zIndex = a.pos.y;
       }
     }
@@ -453,6 +560,8 @@ export class CastleScene {
     this.destroyed = true;
     if (!this.ready) return;
     document.removeEventListener("visibilitychange", this.onVisibility);
+    this.ro?.disconnect();
+    this.app.canvas.removeEventListener("wheel", this.onWheel);
     if (this.wake) window.clearTimeout(this.wake);
     this.app.destroy(true, { children: true });
   }

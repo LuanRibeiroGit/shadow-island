@@ -72,7 +72,7 @@ export const DEFAULT_SETTINGS: Settings = {
   desktop: {
     overlayEnabled: true,
     placement: "bottom",
-    height: 76,
+    height: 72,
     widthFraction: 1,
     monitor: null,
     preferX11OnWayland: true,
