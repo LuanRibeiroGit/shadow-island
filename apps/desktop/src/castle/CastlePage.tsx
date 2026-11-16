@@ -25,10 +25,21 @@ const ROOM_BLURB: Record<Room, string> = {
   barracks: "Agentes descansando ou aguardando.",
 };
 
+const ROOM_SUB: Record<Room, string> = {
+  throne: "Comando geral",
+  library: "Pesquisa e leitura",
+  forge: "Desenvolvimento",
+  laboratory: "Testes e validação",
+  watchtower: "Monitoramento",
+  treasury: "Recursos e custos",
+  barracks: "Descanso e espera",
+};
+
 export function CastlePage({ room }: { room?: string }) {
   const host = useRef<HTMLDivElement>(null);
   const scene = useRef<CastleScene | null>(null);
   const [ready, setReady] = useState(false);
+  const [plates, setPlates] = useState<{ room: Room; x: number; y: number }[]>([]);
   const [zoom, setZoom] = useState<{ zoom: number; fit: number }>({ zoom: 1, fit: 1 });
   const [completed, setCompleted] = useState<number | null>(null);
   const world = useWorld((s) => s.world);
@@ -43,6 +54,7 @@ export function CastlePage({ room }: { room?: string }) {
     s.onRoom = (r) => go({ page: "castle", room: r });
     s.onAgent = (id) => go({ page: "agent", agentId: id });
     s.onZoom = (z, fit) => setZoom({ zoom: z, fit });
+    s.onCamera = setPlates;
     void s.init(host.current!).then(() => setReady(true));
     return () => s.destroy();
   }, [go]);
@@ -70,6 +82,16 @@ export function CastlePage({ room }: { room?: string }) {
     <div className="castle-layout">
       <div className="castle-stage" data-testid="castle-stage">
         <div ref={host} className="castle-canvas-host" />
+        <div className="room-plates" aria-hidden={false}>
+          {plates
+            .filter((p) => !settings.castle.hiddenRooms.includes(p.room))
+            .map((p) => (
+              <button key={p.room} className={`room-plate${selected === p.room ? " on" : ""}`} style={{ left: p.x, top: p.y }} onClick={() => go({ page: "castle", room: p.room })}>
+                <b>{settings.castle.roomNames[p.room] || ROOM_LABEL[p.room]}</b>
+                <span>{ROOM_SUB[p.room]}</span>
+              </button>
+            ))}
+        </div>
         <div className="castle-zoom" role="toolbar" aria-label="Câmera do castelo">
           <button className="btn" title="Aproximar" aria-label="Aproximar" onClick={() => scene.current?.zoomAt(1.4)}>+</button>
           <span className="mono faint">{Math.round((zoom.zoom / zoom.fit) * 100)}%</span>

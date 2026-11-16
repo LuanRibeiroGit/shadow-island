@@ -14,6 +14,7 @@ import {
   MAP_W,
   NAP_SPOT,
   PROPS,
+  islandDecor,
   TILE_PX,
   bedsideOf,
   buildMap,
@@ -40,7 +41,7 @@ import { loadImage, loadManifest } from "../characters/sprites";
 export const CASTLE_W = ISO_SIZE.w;
 export const CASTLE_H = ISO_SIZE.h;
 
-const ANIMATED = new Set(["forge", "cauldron"]);
+const ANIMATED = new Set(["forge", "cauldron", "brazier", "lantern", "fountain"]);
 /** Walking speed in tiles per second. */
 const WALK_SPEED = 3.2;
 /** Souls about one wall-height tall (36 px), in proportion to the furniture. */
@@ -94,7 +95,9 @@ export class CastleScene {
   private destroyed = false;
   readonly app = new Application();
   private root = new Container();
+  private cliffLayer = new Container();
   private groundLayer = new Container();
+  private backdrop: Sprite | null = null;
   private sortLayer = new Container();
   private fxLayer = new Container();
   private highlight = new Graphics();
@@ -128,6 +131,7 @@ export class CastleScene {
   private host: HTMLElement | null = null;
   private ro: ResizeObserver | null = null;
   onZoom: (zoom: number, fit: number) => void = () => {};
+  onCamera: (labels: { room: Room; x: number; y: number }[]) => void = () => {};
 
   async init(el: HTMLElement): Promise<void> {
     this.host = el;
@@ -140,7 +144,7 @@ export class CastleScene {
     this.app.canvas.style.imageRendering = "pixelated";
     el.appendChild(this.app.canvas);
     this.sortLayer.sortableChildren = true;
-    this.root.addChild(this.groundLayer, this.highlight, this.sortLayer, this.fxLayer);
+    this.root.addChild(this.cliffLayer, this.groundLayer, this.highlight, this.sortLayer, this.fxLayer);
     this.app.stage.addChild(this.root);
     this.app.ticker.maxFPS = 30;
     this.app.ticker.add((t) => this.tick(t.deltaMS));
@@ -196,6 +200,16 @@ export class CastleScene {
     const env = m.environments as unknown as Record<string, { image: string; cellWidth?: number; cellHeight?: number; anchorX?: number; anchorY?: number; columns?: number; tiles?: Record<string, number> }>;
     const ts = env["castle-iso"];
     if (!ts) throw new Error("castle-iso ausente no manifest");
+    const bd = env["castle-backdrop"];
+    if (bd) {
+      const bimg = await loadImage(bd.image);
+      if (this.destroyed) return;
+      const bt = Texture.from(bimg);
+      bt.source.scaleMode = "nearest";
+      this.backdrop = new Sprite(bt);
+      this.app.stage.addChildAt(this.backdrop, 0);
+      this.layoutBackdrop();
+    }
     const img = await loadImage(ts.image);
     if (this.destroyed) return;
     const source = Texture.from(img).source;
@@ -271,6 +285,30 @@ export class CastleScene {
     const ch = CASTLE_H * this.zoom;
     const clamp = (pos: number, view: number, size: number) => (size <= view ? (view - size) / 2 : Math.min(0, Math.max(view - size, pos)));
     this.root.position.set(clamp(this.root.x, w, cw), clamp(this.root.y, h, ch));
+    this.layoutBackdrop();
+    this.onCamera(this.labels());
+  }
+
+  /** Room name plates: screen positions above each room, for the HTML layer. */
+  labels(): { room: Room; x: number; y: number }[] {
+    return AREAS.filter((a): a is typeof a & { room: Room } => a.room !== "hall").map((a) => {
+      const p = toIso({ x: (a.x + a.w / 2) * TILE_PX, y: a.y * TILE_PX });
+      const g = this.root.toGlobal({ x: p.x, y: p.y - 46 });
+      return { room: a.room, x: g.x, y: g.y };
+    });
+  }
+
+  /** The misty sky covers the view and drifts a little with the camera. */
+  private layoutBackdrop() {
+    const b = this.backdrop;
+    if (!b) return;
+    const w = this.app.screen.width;
+    const h = this.app.screen.height;
+    const k = Math.max((w * 1.15) / b.texture.width, (h * 1.15) / b.texture.height);
+    b.scale.set(k);
+    const cx = this.root.x + (CASTLE_W * this.zoom) / 2 - w / 2;
+    const cy = this.root.y + (CASTLE_H * this.zoom) / 2 - h / 2;
+    b.position.set((w - b.width) / 2 + cx * 0.05, (h - b.height) / 2 + cy * 0.05);
   }
 
   private tex(name: string): Texture | null {
@@ -305,29 +343,48 @@ export class CastleScene {
    * others are cut down so rooms stay visible, like a doll house.
    */
   private buildGround() {
-    const k = (x: number, y: number) => (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H ? "wall" : this.map.kind[y * MAP_W + x]);
-    const open = (x: number, y: number) => k(x, y) !== "wall";
+    const k = (x: number, y: number) => (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H ? "void" : this.map.kind[y * MAP_W + x]);
+    const room = (x: number, y: number) => {
+      if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) return false;
+      const r = this.map.roomAt[y * MAP_W + x];
+      return k(x, y) === "floor" && r !== null && r !== "hall";
+    };
     let n = 0;
     for (let y = 0; y < MAP_H; y++) {
       for (let x = 0; x < MAP_W; x++) {
         const i = y * MAP_W + x;
-        if (open(x, y)) {
+        const kind = k(x, y);
+        if (kind === "void") continue;
+        const h = Math.abs((x * 73856093) ^ (y * 19349663));
+        // Island edge: rock (and now and then a spectral waterfall) down into the mist.
+        const southVoid = k(x, y + 1) === "void";
+        const eastVoid = k(x + 1, y) === "void";
+        if (southVoid || eastVoid) {
+          const fall = h % 9 === 0 ? (southVoid ? "cliff_fall_L" : "cliff_fall_R") : "cliff";
+          this.sprite(fall, x, y, this.cliffLayer);
+        }
+        if (kind !== "wall") {
           this.sprite(this.map.floor[i] ?? "floor_stone", x, y, this.groundLayer);
           continue;
         }
-        const near = [-2, -1, 1, 2].some((d) => open(x + d, y) || open(x, y + d)) || open(x + 1, y + 1) || open(x - 1, y - 1) || open(x + 1, y - 1) || open(x - 1, y + 1);
-        if (!near) continue;
-        const behind = open(x - 1, y) || open(x, y - 1) || open(x - 2, y) || open(x, y - 2) || open(x - 1, y - 1);
-        if (behind) {
-          this.sprite("wall_low", x, y, this.sortLayer, -1);
+        // Walls: tall at the back of a room (looking into it), low or ruined in front,
+        // so the rooms stay visible like a doll house.
+        // A tall wall would hide anything walkable behind it (up-left on screen).
+        const walk = (xx: number, yy: number) => {
+          const kk = k(xx, yy);
+          return kk === "door" || (kk === "floor" && this.map.floor[yy * MAP_W + xx] !== "earth");
+        };
+        const front = [1, 2, 3].some((d) => walk(x - d, y) || walk(x, y - d) || walk(x - d, y - d)) || walk(x - 2, y - 1) || walk(x - 1, y - 2);
+        const back = room(x + 1, y) || room(x, y + 1) || room(x + 1, y + 1) || room(x - 1, y + 1) || room(x + 1, y - 1);
+        if (front || !back) {
+          this.sprite(h % 4 === 0 ? "wall_broken" : "wall_low", x, y, this.sortLayer, -1);
           continue;
         }
-        // Tall back wall: decorate the face that looks into a room.
-        const face = open(x, y + 1) ? "L" : open(x + 1, y) ? "R" : null;
+        const face = room(x, y + 1) ? "L" : room(x + 1, y) ? "R" : null;
         n++;
         let name = "wall_tall";
         if (face) {
-          const deco = n % 5 === 2 ? "torch" : n % 7 === 4 ? "banner" : n % 6 === 0 ? "window" : null;
+          const deco = n % 4 === 1 ? "torch" : n % 5 === 3 ? "banner" : n % 7 === 0 ? "window" : null;
           if (deco === "torch") name = `wall_tall_${face}_torch0`;
           else if (deco) name = `wall_tall_${face}_${deco}`;
         }
@@ -345,7 +402,7 @@ export class CastleScene {
     for (const s of this.propSprites) s.destroy();
     this.propSprites = [];
     this.animTiles = this.animTiles.filter((a) => a.base.startsWith("wall_"));
-    for (const p of PROPS) {
+    for (const p of [...PROPS, ...islandDecor(this.map)]) {
       if ((p.min ?? 0) > level) continue;
       const animated = ANIMATED.has(p.tile);
       const flat = p.walkable === true;
@@ -354,7 +411,6 @@ export class CastleScene {
       this.propSprites.push(s);
       if (animated) this.animTiles.push({ sprite: s, base: p.tile });
     }
-    this.groundLayer.alpha = level === 0 ? 0.88 : 1;
   }
 
   setHighlight(_hover: unknown, selected?: Room) {

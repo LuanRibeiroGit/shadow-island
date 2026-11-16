@@ -11,8 +11,8 @@ import random
 
 from PIL import Image, ImageDraw
 
-CELL_W, CELL_H = 32, 80
-AX, AY = 16, 68
+CELL_W, CELL_H = 96, 136
+AX, AY = 48, 68
 HW, HH = 16, 8  # half width / half height of a tile diamond
 
 
@@ -104,10 +104,10 @@ class Iso:
 
     def on_left(self, t, z):
         """Point on the +y face (lower-left) of a full tile: t along it, z height."""
-        return (t * HW, AY + t * HH - z)
+        return (AX - HW + t * HW, AY + t * HH - z)
 
     def on_right(self, t, z):
-        return (HW + t * HW, AY + HH - t * HH - z)
+        return (AX + t * HW, AY + HH - t * HH - z)
 
 
 GOLD = rgb("#d7b45a")
@@ -164,14 +164,54 @@ def floor_tile(name):
             return rgb("#1f4f4a")
         return rgb("#2a6a60") if abs(u - 0.5) + abs(v - 0.5) > 0.2 else GOLD
 
-    fns = {"floor_stone": stone, "floor_check": check, "floor_wood": wood, "runner": runner, "carpet": runner, "rug": rug}
+    def path(u, v):
+        # Irregular cobbles.
+        cu, cv = int(u * 3 + (int(v * 3) % 2) * 0.5), int(v * 3)
+        h = (cu * 31 + cv * 17) % 5
+        base = [rgb("#3e4644"), rgb("#454e4b"), rgb("#384140"), rgb("#4a5350"), rgb("#414a48")][h]
+        fu = (u * 3 + (int(v * 3) % 2) * 0.5) % 1
+        if fu < 0.1 or (v * 3) % 1 < 0.12:
+            return rgb("#262d2c")
+        return base
+
+    def earth(u, v):
+        k = (int(u * 32) * 7 + int(v * 16) * 11 + (int(u * 32) * int(v * 16)) % 7) % 17
+        if k == 0:
+            return rgb("#28503f")
+        if k in (3, 9):
+            return rgb("#223a34")
+        if k == 6:
+            return rgb("#1b2724")
+        return rgb("#1f302c")
+
+    def plaza(u, v):
+        cu, cv = int(u * 2), int(v * 2)
+        base = rgb("#4f5a57") if (cu + cv) % 2 == 0 else rgb("#48524f")
+        if u * 2 % 1 < 0.06 or v * 2 % 1 < 0.06:
+            return rgb("#2e3634")
+        return base
+
+    def rune(u, v):
+        # The ring around the fountain: plaza stone with a faint spectral seam.
+        base = plaza(u, v)
+        if abs(u - 0.5) < 0.05 or abs(v - 0.5) < 0.05:
+            return rgb("#3f7a68")
+        return base
+
+    def dais(u, v):
+        if min(u, v, 1 - u, 1 - v) < 0.07:
+            return rgb("#a88a44")
+        cu, cv = int(u * 2), int(v * 2)
+        return rgb("#3e3550") if (cu + cv) % 2 == 0 else rgb("#463c5a")
+
+    fns = {"path": path, "earth": earth, "plaza": plaza, "rune": rune, "dais": dais, "floor_stone": stone, "floor_check": check, "floor_wood": wood, "runner": runner, "carpet": runner, "rug": rug}
     return Iso().floor(fns[name]).img
 
 
 def wall(name):
     c = Iso()
     tall = name.startswith("wall_tall")
-    h = WALL_TALL if tall else WALL_LOW
+    h = WALL_TALL if tall else 4 if name == "wall_broken" else WALL_LOW
     top = rgb("#2b3638")
     c.box(1, 1, h, top, rgb("#4a5b5a"), rgb("#3a4848"), outline=False)
     # Brick courses on both faces.
@@ -189,6 +229,19 @@ def wall(name):
     for t in [i / 16 for i in range(17)]:
         c.px(*c.on_left(t, h), rgb("#5f7472"))
         c.px(*c.on_right(t, h), rgb("#4b5d5c"))
+    if tall:
+        # Battlements along the top.
+        for t0 in (0.0, 0.5):
+            c.box(0.22, 0.22, 7, rgb("#33403f"), rgb("#4f605f"), rgb("#3e4c4c"), z=h, ox=-0.5 + 0.11 + t0 * 0.0 + (0.5 if t0 else 0), oy=0.39)
+            c.box(0.22, 0.22, 7, rgb("#33403f"), rgb("#4f605f"), rgb("#3e4c4c"), z=h, ox=0.39, oy=-0.5 + 0.11 + (0.5 if t0 else 0))
+        # Moss and ivy dripping down.
+        rnd = random.Random(name)
+        for _ in range(5):
+            t = rnd.random()
+            at = c.on_left if rnd.random() < 0.5 else c.on_right
+            for k in range(rnd.randrange(3, 12)):
+                x, y = at(t, h - k)
+                c.px(x, y, rgb("#2f6b4f") if k % 3 else rgb("#4f9a72"))
     parts = name.split("_")
     if len(parts) >= 4:
         side, deco = parts[2], "_".join(parts[3:])
@@ -407,6 +460,145 @@ def prop(name):
             c.px(x, y - 26, GOLD)
             c.px(x - 1, y - 25, rgb("#b8c4c8"))
             c.px(x + 1, y - 25, rgb("#b8c4c8"))
+    elif name == "bookshelf_side":
+        c.box(0.4, 1, 30, rgb("#4a3424"), rgb("#2e2016"), rgb("#3a281c"), ox=-0.3)
+        for shelf in range(3):
+            z0 = 3 + shelf * 9
+            t = 0.06
+            while t < 0.94:
+                col = rgb(rnd.choice(["#8a3b3b", "#3b5a8a", "#5a8a3b", "#8a7a3b", "#6a3b8a", "#3b8a7e"]))
+                for zz in range(z0, z0 + rnd.choice((6, 7))):
+                    for k in range(2):
+                        x, y = P(-0.1, -0.5 + t + k * 0.03, zz)
+                        c.px(x, y, col)
+                t += rnd.choice((0.05, 0.07))
+    elif name == "throne_big":
+        c.shadow(0.7)
+        c.box(1, 0.8, 5, rgb("#3a3350"))
+        c.box(1, 0.8, 1, rgb("#a88a44"), z=5, outline=False)
+        c.box(0.9, 0.25, 52, rgb("#1f2a2e"), rgb("#2a3a3c"), rgb("#18201f"), z=6, oy=-0.3)
+        # Spiked crown on the backrest with a glowing soul gem.
+        for gx in (-0.35, 0.0, 0.35):
+            c.box(0.12, 0.12, 12 if gx == 0 else 8, rgb("#2a3a3c"), z=58, ox=gx, oy=-0.3)
+        x, y = P(0, -0.15, 46)
+        c.ellipse(x, y, 9, 8, (124, 242, 194, 50))
+        c.ellipse(x, y, 2.6, 3.2, GLOW)
+        c.px(x, y - 1, rgb("#e9fff6"))
+        c.box(0.8, 0.55, 14, rgb("#2e5a54"), z=6, oy=0.1)
+        c.box(0.15, 0.6, 22, rgb("#a88a44"), z=6, ox=-0.42, oy=0.05)
+        c.box(0.15, 0.6, 22, rgb("#a88a44"), z=6, ox=0.42, oy=0.05)
+        for gx in (-0.42, 0.42):
+            x, y = P(gx, 0.05, 30)
+            c.ellipse(x, y, 2, 2, GLOW)
+    elif name.startswith("brazier"):
+        f = name.endswith("1")
+        c.shadow(0.3)
+        c.box(0.14, 0.14, 14, rgb("#2b3135"))
+        x, y = P(0, 0, 14)
+        c.ellipse(x, y, 7, 3, rgb("#3a4448"))
+        c.ellipse(x, y - 1, 6, 2.2, rgb("#1a2224"))
+        c.ellipse(x, y - 6, 12, 11, (124, 242, 194, 40))
+        c.ellipse(x, y - 4 - f, 4, 5, rgb("#3fbf8a"))
+        c.ellipse(x + (1 if f else -1), y - 6 - f, 2.4, 4, GLOW)
+        c.ellipse(x, y - 3, 1.4, 2, rgb("#e9fff6"))
+    elif name == "banner_stand":
+        c.shadow(0.2)
+        x, y = P(0, 0)
+        c.rect(x, y - 44, 1, 44, rgb("#2b3135"))
+        c.rect(x - 6, y - 44, 13, 1, rgb("#a88a44"))
+        for k in range(30):
+            w = 6 - (k // 26) * 3
+            c.rect(x - w, y - 43 + k, 2 * w, 1, rgb("#1f4f4a") if k % 9 else rgb("#2a6a60"))
+        c.ellipse(x, y - 30, 2.5, 3, GLOW)
+    elif name == "orb":
+        c.shadow(0.35)
+        c.box(0.4, 0.4, 14, rgb("#4a3a5a"))
+        x, y = P(0, 0, 14)
+        c.ellipse(x, y - 7, 14, 13, (90, 160, 255, 35))
+        c.ellipse(x, y - 7, 6, 6, rgb("#3a7ad8"))
+        c.ellipse(x - 1, y - 8, 3.5, 3.5, rgb("#7ab8ff"))
+        c.px(x - 2, y - 10, rgb("#ffffff"))
+    elif name == "potion_tank":
+        c.shadow(0.35)
+        c.box(0.5, 0.5, 5, rgb("#2b3135"))
+        x, y = P(0, 0, 5)
+        c.ellipse(x, y - 14, 12, 16, (124, 242, 140, 35))
+        for k in range(26):
+            c.rect(x - 6, y - k, 12, 1, rgb("#4fdc8c") if k < 20 else rgb("#9af0bc"))
+            c.px(x - 6, y - k, rgb("#2f8a5a"))
+            c.px(x + 5, y - k, rgb("#d6ffe0"))
+        for k in (5, 11, 16):
+            c.px(x - 2 + k % 4, y - k, rgb("#e9fff6"))
+        c.box(0.5, 0.5, 4, rgb("#2b3135"), z=31)
+    elif name.startswith("fountain"):
+        f = name.endswith("1")
+        x, y = P(0, 0)
+        c.ellipse(x, y, 30, 15, (0, 0, 0, 70))
+        c.ellipse(x, y - 4, 28, 13, rgb("#4f5a57"))
+        c.ellipse(x, y - 6, 26, 11.5, rgb("#5f6b67"))
+        c.ellipse(x, y - 6, 23, 9.5, rgb("#2a8a6a"))
+        c.ellipse(x, y - 6, 20, 8, rgb("#4fdcae"))
+        for k in range(6):
+            c.px(x - 16 + k * 6 + (2 if f else 0), y - 6 + (k % 2), rgb("#d6fff0"))
+        # Hooded statue holding a lantern, rising from the pool.
+        c.box(0.5, 0.5, 10, rgb("#5f6b67"), z=6)
+        c.ellipse(x, y - 34, 6, 16, rgb("#6f7d79"))
+        c.ellipse(x + 2, y - 34, 3.5, 15, rgb("#5a6764"))
+        c.ellipse(x, y - 52, 4.6, 4.2, rgb("#7d8b87"))
+        c.px(x - 1, y - 52, GLOW)
+        c.px(x + 1, y - 52, GLOW)
+        c.rect(x + 6, y - 46, 1, 8, rgb("#5a6764"))
+        c.ellipse(x + 6, y - 37, 9, 9, (124, 242, 194, 55))
+        c.ellipse(x + 6, y - 37, 2.4, 3, GLOW)
+        # Spectral water streaming down.
+        for k in range(10):
+            c.px(x - 4 + (k % 2), y - 26 + k * 2, (124, 242, 194, 160))
+            c.px(x + 4 - (k % 2), y - 26 + k * 2, (124, 242, 194, 160))
+    elif name.startswith("lantern"):
+        f = name.endswith("1")
+        c.shadow(0.2)
+        x, y = P(0, 0)
+        c.rect(x, y - 30, 1, 30, rgb("#2b3135"))
+        c.rect(x, y - 31, 5, 1, rgb("#2b3135"))
+        c.ellipse(x + 4, y - 25, 10, 10, (124, 242, 194, 45 + (10 if f else 0)))
+        c.rect(x + 2, y - 29, 5, 7, rgb("#1a2224"))
+        c.rect(x + 3, y - 28, 3, 5, GLOW if not f else rgb("#9af7d6"))
+        c.px(x + 4, y - 26, rgb("#e9fff6"))
+    elif name == "tree_dead":
+        c.shadow(0.4)
+        x, y = P(0, 0)
+        bark, bark_d = rgb("#2b2a2e"), rgb("#1c1b1f")
+        for k in range(30):
+            w = 3 - k // 12
+            c.rect(x - w + (k // 10) * (1 if k % 2 else 0), y - k, 2 * w, 1, bark if k % 4 else bark_d)
+        def branch(x0, y0, dx, dy, n, w):
+            for i in range(n):
+                c.rect(x0 + dx * i, y0 + dy * i, w, 1, bark)
+            return x0 + dx * n, y0 + dy * n
+        bx, by = branch(x, y - 22, -1, -1, 8, 2)
+        branch(bx, by, -1, 0.3, 4, 1)
+        branch(bx, by, 0.3, -1, 5, 1)
+        bx, by = branch(x + 1, y - 26, 1, -1, 7, 2)
+        branch(bx, by, 1, 0.4, 4, 1)
+        branch(bx, by, -0.2, -1, 6, 1)
+        branch(x, y - 30, 0.2, -1, 8, 1)
+        for _ in range(4):
+            c.px(x - 10 + rnd.randrange(20), y - 30 - rnd.randrange(10), GLOW)
+    elif name == "grave":
+        c.shadow(0.25)
+        c.box(0.35, 0.14, 13, rgb("#5a6562"), oy=-0.1)
+        x, y = P(0, -0.03, 13)
+        c.ellipse(x - 1, y - 1, 4, 2.5, rgb("#6a7572"))
+        c.rect(x - 2, y + 3, 3, 1, rgb("#3a4442"))
+        c.rect(x - 1, y + 2, 1, 3, rgb("#3a4442"))
+        c.ellipse(x, y + 14, 6, 2, rgb("#2f6b4f"))
+    elif name == "broken_pillar":
+        c.shadow(0.35)
+        c.box(0.6, 0.6, 4, rgb("#5a6866"))
+        c.box(0.42, 0.42, 18, rgb("#7b8b88"), z=4)
+        c.box(0.2, 0.25, 6, rgb("#7b8b88"), z=22, ox=-0.1)
+        x, y = P(0.5, 0.3)
+        c.box(0.4, 0.2, 5, rgb("#6e7d7a"), ox=0.25, oy=0.4)
     elif name == "bed":
         c.shadow(0.5)
         c.box(0.7, 0.95, 7, rgb("#5a3d27"))
@@ -432,27 +624,112 @@ def prop(name):
     return c.img
 
 
-FLOORS = ["floor_stone", "floor_wood", "floor_check", "runner", "carpet", "rug"]
-WALLS = ["wall_tall", "wall_low"] + [f"wall_tall_{s}_{d}" for s in ("L", "R") for d in ("torch0", "torch1", "banner", "window")]
+def cliff(name):
+    """Rock under the island's edge, going down into the mist."""
+    c = Iso()
+    rnd = random.Random(name)
+    depth = 64
+    c.box(1, 1, depth, rgb("#20292a"), rgb("#2a3536"), rgb("#1c2526"), z=-depth, outline=False)
+    for z in range(-depth + 4, 0, 5):
+        for t in [i / 16 for i in range(17)]:
+            if rnd.random() < 0.55:
+                c.px(*c.on_left(t, z + rnd.choice((0, 1))), rgb("#1e2828"))
+                c.px(*c.on_right(t, z + rnd.choice((0, 1))), rgb("#161e1f"))
+    # Moss on the rim, glowing drips.
+    for t in [i / 16 for i in range(17)]:
+        for k in range(rnd.randrange(1, 5)):
+            c.px(*c.on_left(t, -k), rgb("#2f6b4f"))
+            c.px(*c.on_right(t, -k), rgb("#24513f"))
+    for _ in range(3):
+        at = c.on_left if rnd.random() < 0.5 else c.on_right
+        t = rnd.random()
+        for k in range(rnd.randrange(6, 20)):
+            c.px(*at(t, -k), (124, 242, 194, 120))
+    if name.startswith("cliff_fall"):
+        at = c.on_left if name.endswith("L") else c.on_right
+        for k in range(depth):
+            for dt in (-2, -1, 0, 1, 2):
+                col = rgb("#7cf2c2") if abs(dt) < 2 and (k + dt) % 5 else rgb("#3fbf8a")
+                c.px(*at(0.5 + dt / 16, -k), (*col[:3], 220 - k * 2))
+    # Fade into the mist at the bottom.
+    for y in range(CELL_H):
+        for x in range(CELL_W):
+            px_ = c.img.getpixel((x, y))
+            if px_[3] and y > AY + 30:
+                k = min(1, (y - AY - 30) / 34)
+                c.img.putpixel((x, y), (px_[0], px_[1], px_[2], int(px_[3] * (1 - k))))
+    return c.img
+
+
+FLOORS = ["floor_stone", "floor_wood", "floor_check", "runner", "carpet", "rug", "path", "earth", "plaza", "rune", "dais"]
+CLIFFS = ["cliff", "cliff_fall_L", "cliff_fall_R"]
+WALLS = ["wall_tall", "wall_low", "wall_broken"] + [f"wall_tall_{s}_{d}" for s in ("L", "R") for d in ("torch0", "torch1", "banner", "window")]
 PROPS = [
     "bookshelf", "table_l", "table_m", "table_r", "table_book", "table_candle", "table_map", "table_flask",
     "chair_n", "chair_s", "bench", "plant", "pillar", "statue", "throne", "candles", "crystal", "chest", "gold",
     "barrel", "telescope", "map_table", "forge0", "forge1", "anvil", "cauldron0", "cauldron1", "rack", "bed",
-    "sleeper", "zz",
+    "sleeper", "zz", "bookshelf_side", "throne_big", "brazier0", "brazier1", "banner_stand", "orb", "potion_tank",
+    "fountain0", "fountain1", "lantern0", "lantern1", "tree_dead", "grave", "broken_pillar",
 ]
 
 
+def backdrop(path):
+    """Misty sky with distant ruined spires (screen-space background)."""
+    W, H = 960, 540
+    img = Image.new("RGBA", (W, H))
+    px = img.load()
+    rnd = random.Random("backdrop")
+    top, mid, bot = rgb("#071012"), rgb("#12302c"), rgb("#0a1818")
+    for y in range(H):
+        t = y / H
+        a, b, k = (top, mid, t / 0.55) if t < 0.55 else (mid, bot, (t - 0.55) / 0.45)
+        col = tuple(int(a[i] + (b[i] - a[i]) * k) for i in range(3)) + (255,)
+        for x in range(W):
+            px[x, y] = col
+    d = ImageDraw.Draw(img)
+    # Distant spires and broken towers (two layers).
+    for layer, (col, base, hmax) in enumerate(((rgb("#10221f"), 330, 190), (rgb("#0c1a18"), 380, 140))):
+        x = -20
+        while x < W:
+            w = rnd.randrange(18, 46)
+            h = rnd.randrange(40, hmax)
+            d.rectangle([x, base - h, x + w, H], fill=col)
+            if rnd.random() < 0.6:
+                d.polygon([(x - 2, base - h), (x + w // 2, base - h - rnd.randrange(16, 50)), (x + w + 2, base - h)], fill=col)
+            if rnd.random() < 0.5:
+                for k in range(3):
+                    wx = x + 4 + rnd.randrange(max(1, w - 8))
+                    wy = base - h + 10 + rnd.randrange(max(1, h - 20))
+                    d.rectangle([wx, wy, wx + 2, wy + 4], fill=rgb("#3fbf8a", 140 if layer else 90))
+            x += w + rnd.randrange(10, 60)
+    # Fog bands.
+    fog = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    fd = ImageDraw.Draw(fog)
+    for _ in range(26):
+        cx, cy = rnd.randrange(W), rnd.randrange(220, H)
+        rx, ry = rnd.randrange(80, 260), rnd.randrange(10, 30)
+        fd.ellipse([cx - rx, cy - ry, cx + rx, cy + ry], fill=(120, 190, 175, rnd.randrange(14, 34)))
+    img = Image.alpha_composite(img, fog)
+    # Faint stars.
+    for _ in range(60):
+        x, y = rnd.randrange(W), rnd.randrange(160)
+        img.putpixel((x, y), (200, 240, 230, rnd.randrange(60, 160)))
+    img.save(path)
+
+
 def build(out_path, manifest):
-    names = FLOORS + WALLS + PROPS
+    names = FLOORS + CLIFFS + WALLS + PROPS
     cols = 16
     rows = math.ceil(len(names) / cols)
     sheet = Image.new("RGBA", (cols * CELL_W, rows * CELL_H), (0, 0, 0, 0))
     index = {}
     for i, n in enumerate(names):
-        img = floor_tile(n) if n in FLOORS else wall(n) if n in WALLS else prop(n)
+        img = floor_tile(n) if n in FLOORS else cliff(n) if n in CLIFFS else wall(n) if n in WALLS else prop(n)
         sheet.paste(img, ((i % cols) * CELL_W, (i // cols) * CELL_H))
         index[n] = i
     sheet.save(out_path)
+    backdrop(out_path.parent / "castle-backdrop.png")
+    manifest["environments"]["castle-backdrop"] = {"image": "environments/castle-backdrop.png", "width": 960, "height": 540}
     manifest["environments"]["castle-iso"] = {
         "image": "environments/castle-iso.png",
         "width": sheet.width,

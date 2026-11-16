@@ -76,7 +76,7 @@ describe("ecosystem rules", () => {
   });
 
   it("walks along a path at the given speed", () => {
-    const path = findPath(map, { x: 2, y: 17 }, { x: 6, y: 17 })!;
+    const path = findPath(map, { x: 16, y: 25 }, { x: 20, y: 25 })!;
     let pos = feetOf(path[0]!);
     let rest = path.slice(1);
     let t = 0;
@@ -86,7 +86,7 @@ describe("ecosystem rules", () => {
       rest = s.path;
       t += 100;
     }
-    expect(tileOf(pos)).toEqual({ x: 6, y: 17 });
+    expect(tileOf(pos)).toEqual({ x: 20, y: 25 });
     // 4 tiles at 4 tiles/s ≈ 1 s
     expect(t).toBeGreaterThanOrEqual(900);
     expect(t).toBeLessThanOrEqual(1100);
