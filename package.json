@@ -1,0 +1,22 @@
+{
+  "name": "ilha-das-sombras",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Ilha das Sombras: gamified desktop monitor for Claude Code agents",
+  "packageManager": "pnpm@10.0.0",
+  "scripts": {
+    "dev": "pnpm --filter @cq/desktop tauri dev",
+    "build": "pnpm --filter @cq/desktop tauri build",
+    "web:dev": "pnpm --filter @cq/desktop dev",
+    "typecheck": "pnpm -r typecheck",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:rust": "cargo test --workspace",
+    "test:e2e": "pnpm --filter @cq/desktop test:e2e",
+    "simulate": "node scripts/simulate-session.mjs"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2",
+    "vitest": "5.1.0"
+  }
+}
