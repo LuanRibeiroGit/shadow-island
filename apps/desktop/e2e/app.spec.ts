@@ -80,5 +80,8 @@ test("overlay page renders the crew strip", async ({ page }) => {
   await page.setViewportSize({ width: 1200, height: 160 });
   await page.goto("/overlay.html");
   await expect(page.locator(".overlay-root canvas")).toBeVisible();
-  await expect(page.locator(".nameplate").first()).toBeVisible({ timeout: 10_000 });
+  // Only working agents appear on the desktop, over a transparent background.
+  await expect(page.locator(".overlay-root")).not.toHaveAttribute("data-crew", "0", { timeout: 10_000 });
+  await expect(page.locator(".overlay-root")).toHaveAttribute("data-crew", /\d+/);
+  expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe("rgba(0, 0, 0, 0)");
 });

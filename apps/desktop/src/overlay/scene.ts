@@ -8,6 +8,8 @@ import { CharacterView, MonsterView, spawnEffect, type ViewOptions } from "../ch
 
 export interface OverlayOptions extends ViewOptions {
   walkSpeed: number;
+  /** Reserve space under the feet for name labels. */
+  showNames: boolean;
 }
 
 export interface ScreenPos {
@@ -34,7 +36,7 @@ export class OverlayScene {
   private walkers = new Map<string, Walker & { home: number; pinned: boolean; nextWander: number }>();
   private monsters = new Map<number, MonsterView>();
   private lastStates = new Map<string, string>();
-  private opts: OverlayOptions = { scale: 1, animationSpeed: 1, animationsEnabled: true, walkSpeed: 28 };
+  private opts: OverlayOptions = { scale: 1, animationSpeed: 1, animationsEnabled: true, walkSpeed: 28, showNames: false };
   private custom: Record<string, CharacterCustomization> = {};
   private onPositions: (p: ScreenPos[]) => void = () => {};
   private onPick: (id: string) => void = () => {};
@@ -81,8 +83,8 @@ export class OverlayScene {
   }
 
   private ground(): number {
-    // Leave room under the feet for the nameplate.
-    return this.app.screen.height - 18;
+    // Feet rest on the bottom edge (the taskbar's top); leave room for names if shown.
+    return this.app.screen.height - (this.opts.showNames ? 16 : 2);
   }
 
   async sync(agents: Agent[], encounters: Encounter[], now: number): Promise<void> {

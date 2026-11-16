@@ -120,11 +120,13 @@ pub fn ensure_overlay(app: &AppHandle) -> tauri::Result<WebviewWindow> {
         .decorations(false)
         .always_on_top(true)
         .skip_taskbar(true)
-        .resizable(false)
+        // GTK keeps non-resizable windows at their natural size (~200 px for a
+        // webview); a resizable, undecorated window can be made as thin as the taskbar.
+        .resizable(true)
         .shadow(false)
         .focused(false)
         .visible(false)
-        .inner_size(800.0, 140.0)
+        .inner_size(800.0, 72.0)
         .build()?;
     position_overlay(app, &w);
     start_click_through_tracker(app.clone());
@@ -170,7 +172,7 @@ pub fn position_overlay(app: &AppHandle, w: &WebviewWindow) {
         std::thread::sleep(Duration::from_millis(250));
         let Ok(size) = w2.inner_size() else { return };
         let actual = (size.height as f64 / scale).round() as i32;
-        if actual > r.height as i32 && placement == OverlayPlacement::Bottom {
+        if actual > r.height as i32 && matches!(placement, OverlayPlacement::Bottom | OverlayPlacement::Taskbar) {
             let y = r.y + r.height as i32 - actual;
             log::info!("overlay: window is {actual}px tall (asked {}), moving to y={y}", r.height);
             let _ = w2.set_position(LogicalPosition::new(r.x as f64, y as f64));

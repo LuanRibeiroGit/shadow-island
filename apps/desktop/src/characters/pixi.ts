@@ -35,6 +35,8 @@ export interface ViewOptions {
   scale: number;
   animationSpeed: number;
   animationsEnabled: boolean;
+  /** Force an animation (e.g. "move" while walking in the castle). */
+  animation?: string;
 }
 
 export class CharacterView extends Container {
@@ -57,16 +59,17 @@ export class CharacterView extends Container {
     this.manifest ??= await loadManifest();
     const ch = resolveCharacter(agent, custom);
     const vis = visualFor(agent, now);
+    const anim = opts.animation ?? vis.animation;
     const spec = this.manifest.characters[ch.cls.sprite];
     if (!spec) return;
     const sheetKey = `${ch.cls.sprite}|${ch.palette.cloak}|${ch.palette.trim}|${ch.palette.glow}`;
-    const key = `${sheetKey}|${vis.animation}`;
+    const key = `${sheetKey}|${anim}`;
     this.visible = !ch.hidden;
     this.scale.set(ch.scale * opts.scale * this.facing, ch.scale * opts.scale);
     if (key === this.currentKey) return;
     const canvas = await characterSheet(ch.cls.sprite, ch.palette);
-    const frames = framesFor(sheetKey, sourceFor(sheetKey, canvas), spec, vis.animation);
-    const a = spec.animations[vis.animation] ?? spec.animations.idle;
+    const frames = framesFor(sheetKey, sourceFor(sheetKey, canvas), spec, anim);
+    const a = spec.animations[anim] ?? spec.animations.idle;
     if (!this.sprite) {
       this.sprite = new AnimatedSprite(frames);
       this.sprite.anchor.set(0.5, spec.anchorY / spec.frameHeight);

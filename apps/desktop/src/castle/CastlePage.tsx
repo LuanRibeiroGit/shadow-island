@@ -12,7 +12,8 @@ import { Portrait } from "../components/Portrait";
 import { QualityBadge } from "../components/Stat";
 import { EVENT_LABEL, MISSION_CLASS, MISSION_LABEL, ROOM_LABEL, STATE_CLASS, STATE_LABEL, fmtTime, timeAgo } from "../components/labels";
 import { CastleScene } from "./scene";
-import { CASTLE_H, CASTLE_W, restorationLevel, RESTORATION_LABEL, RESTORATION_THRESHOLDS } from "./layout";
+import { restorationLevel, RESTORATION_LABEL, RESTORATION_THRESHOLDS } from "./layout";
+import { CASTLE_H, CASTLE_W } from "./scene";
 import { useT } from "../i18n";
 
 const ROOM_BLURB: Record<Room, string> = {

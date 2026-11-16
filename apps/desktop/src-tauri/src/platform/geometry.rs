@@ -19,6 +19,10 @@ pub enum OverlayPlacement {
     Bottom,
     /// Just below a top panel (GNOME top bar, top taskbars).
     Top,
+    /// Over the bottom taskbar itself (bottom edge of the monitor). Works where the
+    /// OS lets a topmost window cover the taskbar (Windows, most X11 panels); GNOME
+    /// draws its dock above every window, so there the strip would be hidden.
+    Taskbar,
 }
 
 /// Compute the overlay strip rectangle from the monitor rectangle and its work area
@@ -34,6 +38,7 @@ pub fn overlay_rect(monitor: Rect, work_area: Option<Rect>, placement: OverlayPl
     let y = match placement {
         OverlayPlacement::Bottom => wa.y + wa.height as i32 - height as i32,
         OverlayPlacement::Top => wa.y,
+        OverlayPlacement::Taskbar => monitor.y + monitor.height as i32 - height as i32,
     };
     Rect { x, y, width, height }
 }
@@ -56,6 +61,13 @@ mod tests {
         let wa = Rect { x: 0, y: 32, width: 1920, height: 1048 };
         let r = overlay_rect(MON, Some(wa), OverlayPlacement::Top, 100, 0.5);
         assert_eq!(r, Rect { x: 480, y: 32, width: 960, height: 100 });
+    }
+
+    #[test]
+    fn over_the_taskbar() {
+        let wa = Rect { x: 0, y: 0, width: 1920, height: 1012 };
+        let r = overlay_rect(MON, Some(wa), OverlayPlacement::Taskbar, 76, 1.0);
+        assert_eq!(r, Rect { x: 0, y: 1004, width: 1920, height: 76 });
     }
 
     #[test]

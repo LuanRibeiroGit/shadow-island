@@ -705,6 +705,221 @@ def build_environment(manifest):
     manifest["environments"]["island-backdrop"] = {"image": "environments/island-backdrop.png", "width": W, "height": H}
 
 
+# ------------------------------------------------------------ top-down castle
+
+TD_TILES = [
+    "floor_stone", "floor_wood", "carpet", "wall", "wall_face", "door", "bed", "sleeper",
+    "desk", "bookshelf", "anvil", "forge0", "forge1", "cauldron0", "cauldron1", "throne",
+    "telescope", "chest", "gold", "map_table", "barrel", "crystal", "candles", "torch0",
+    "torch1", "rack", "stool", "window", "zz", "rug",
+]
+
+
+def td_tile(name: str) -> Image.Image:
+    """16x16 tiles for the castle seen from above (3/4 view, like classic RPG maps)."""
+    c = Canvas(TILE, TILE)
+    rnd = random.Random("td-" + name)
+    stone, stone_d, stone_l = hexrgb("#2a3a3d"), hexrgb("#1a2426"), hexrgb("#3d5654")
+    wood, wood_d, wood_l = hexrgb("#4a3424"), hexrgb("#33241a"), hexrgb("#6a4c34")
+    gold = hexrgb("#d7b45a")
+    glow = hexrgb("#7cf2c2")
+    teal = hexrgb("#1f4f4a")
+    if name == "floor_stone":
+        c.rect(0, 0, 16, 16, hexrgb("#253235"))
+        c.rect(0, 7, 16, 1, hexrgb("#1c2729"))
+        c.rect(0, 15, 16, 1, hexrgb("#1c2729"))
+        c.rect(7, 0, 1, 7, hexrgb("#1c2729"))
+        c.rect(15, 8, 1, 7, hexrgb("#1c2729"))
+        for _ in range(5):
+            c.px(rnd.randrange(16), rnd.randrange(16), hexrgb("#2f3e40"))
+    elif name == "floor_wood":
+        c.rect(0, 0, 16, 16, wood)
+        for x in range(0, 16, 4):
+            c.rect(x, 0, 1, 16, wood_d)
+        c.rect(1, 6, 3, 1, wood_d)
+        c.rect(9, 12, 3, 1, wood_d)
+    elif name == "carpet":
+        c.rect(0, 0, 16, 16, hexrgb("#4a1f2a"))
+        c.rect(0, 0, 16, 1, hexrgb("#5e2a36"))
+        c.px(7, 7, gold)
+        c.px(8, 8, gold)
+        c.px(7, 8, hexrgb("#6b2f3c"))
+        c.px(8, 7, hexrgb("#6b2f3c"))
+    elif name == "rug":
+        c.rect(0, 0, 16, 16, teal)
+        c.rect(1, 1, 14, 14, hexrgb("#24605a"))
+        c.rect(3, 3, 10, 10, teal)
+        c.rect(7, 5, 2, 6, gold)
+    elif name == "wall":
+        c.rect(0, 0, 16, 16, hexrgb("#141c1e"))
+        c.rect(0, 0, 16, 1, hexrgb("#1e292b"))
+        for _ in range(4):
+            c.px(rnd.randrange(16), rnd.randrange(16), hexrgb("#1a2325"))
+    elif name == "wall_face":
+        c.rect(0, 0, 16, 4, hexrgb("#141c1e"))
+        c.rect(0, 4, 16, 12, stone)
+        for row in range(3):
+            y = 4 + row * 4
+            c.rect(0, y + 3, 16, 1, stone_d)
+            off = 0 if row % 2 == 0 else 4
+            for x in range(off, 16, 8):
+                c.rect(x, y, 1, 3, stone_d)
+            c.rect(off + 1, y, 3, 1, stone_l)
+        c.rect(0, 15, 16, 1, hexrgb("#10181a"))
+    elif name == "window":
+        td = td_tile("wall_face")
+        c.img.paste(td, (0, 0))
+        c.rect(5, 5, 6, 8, hexrgb("#0b1a26"))
+        c.ellipse(9, 7, 1.2, 1.2, hexrgb("#e8f4f0"))
+        c.rect(7, 5, 1, 8, stone_d)
+    elif name in ("torch0", "torch1"):
+        c.img.paste(td_tile("wall_face"), (0, 0))
+        c.rect(7, 9, 2, 5, wood)
+        f = 0 if name == "torch0" else 1
+        c.ellipse(8, 7 - f * 0.5, 2, 2.5, glow)
+        c.ellipse(8, 8, 1, 1, hexrgb("#e9fff6"))
+        c.ellipse(8, 8, 7, 7, (*glow[:3], 40))
+    elif name == "door":
+        c.rect(0, 0, 16, 16, hexrgb("#253235"))
+        c.rect(0, 0, 1, 16, hexrgb("#141c1e"))
+        c.rect(15, 0, 1, 16, hexrgb("#141c1e"))
+        c.rect(1, 6, 14, 4, wood_d)
+        c.rect(1, 7, 14, 2, wood)
+    elif name == "bed":
+        c.rect(1, 0, 14, 16, wood_d)
+        c.rect(2, 1, 12, 14, wood)
+        c.rect(3, 2, 10, 4, hexrgb("#e6e2d4"))  # pillow
+        c.rect(3, 6, 10, 9, hexrgb("#2e5a54"))  # blanket
+        c.rect(3, 6, 10, 1, hexrgb("#d0ccbe"))  # sheet fold
+        c.rect(3, 14, 10, 1, hexrgb("#24504a"))
+    elif name == "sleeper":
+        # Greyscale so it can be tinted with the character's cloak colour at runtime.
+        c.rect(3, 6, 10, 9, hexrgb("#d8d8d8"))
+        c.rect(3, 6, 10, 1, hexrgb("#f4f4f4"))
+        c.rect(4, 8, 8, 6, hexrgb("#c4c4c4"))
+        c.rect(3, 14, 10, 1, hexrgb("#a8a8a8"))
+        c.ellipse(8, 4, 2.8, 2.4, hexrgb("#20262a"))  # hood
+        c.rect(7, 4, 1, 1, hexrgb("#7cf2c2"))  # closed glowing eyes
+        c.rect(9, 4, 1, 1, hexrgb("#7cf2c2"))
+    elif name == "zz":
+        for i, (x, y) in enumerate(((3, 11), (7, 7), (11, 2))):
+            sz = 2 + i
+            a = (220, 245, 238, 220)
+            c.rect(x, y, sz, 1, a)
+            c.line(x + sz - 1, y + 1, x, y + sz - 1, a)
+            c.rect(x, y + sz - 1, sz, 1, a)
+    elif name == "desk":
+        c.rect(1, 3, 14, 10, wood_d)
+        c.rect(1, 3, 14, 8, wood_l)
+        c.rect(3, 4, 5, 4, hexrgb("#f2ecd8"))
+        c.rect(4, 5, 3, 1, hexrgb("#8a8478"))
+        c.rect(10, 4, 2, 3, hexrgb("#2b2b38"))
+        c.px(12, 4, glow)
+        c.rect(2, 13, 1, 2, wood_d)
+        c.rect(13, 13, 1, 2, wood_d)
+    elif name == "bookshelf":
+        c.rect(0, 0, 16, 16, wood_d)
+        for shelf in range(3):
+            y = 1 + shelf * 5
+            x = 1
+            while x < 15:
+                w = rnd.choice((1, 2))
+                col = rnd.choice(["#7a3b3b", "#3b5a7a", "#5a7a3b", "#7a6a3b", "#5a3b7a", "#3b7a6e"])
+                c.rect(x, y, w, 4, hexrgb(col))
+                x += w
+            c.rect(0, y + 4, 16, 1, wood)
+    elif name == "anvil":
+        c.ellipse(8, 13, 6, 2, (0, 0, 0, 90))
+        c.rect(4, 10, 8, 3, hexrgb("#2b3135"))
+        c.rect(2, 6, 12, 4, hexrgb("#4a5459"))
+        c.rect(2, 6, 12, 1, hexrgb("#6b777c"))
+        c.rect(12, 7, 3, 2, hexrgb("#4a5459"))
+    elif name in ("forge0", "forge1"):
+        f = 0 if name == "forge0" else 1
+        c.rect(1, 1, 14, 14, stone_d)
+        c.rect(2, 2, 12, 12, stone)
+        c.rect(4, 4, 8, 8, hexrgb("#1a0d08"))
+        c.ellipse(8, 8 + f * 0.5, 3.5, 3, hexrgb("#e8742a"))
+        c.ellipse(8, 9, 2, 1.6 + f * 0.6, hexrgb("#ffd28a"))
+        c.ellipse(8, 8, 9, 9, (255, 140, 60, 30))
+    elif name in ("cauldron0", "cauldron1"):
+        f = 0 if name == "cauldron0" else 1
+        c.ellipse(8, 10, 6, 5, hexrgb("#1c2224"))
+        c.ellipse(8, 9, 5, 3.5, hexrgb("#2f3a3c"))
+        c.ellipse(8, 9, 4, 2.6, hexrgb("#6fdc8c"))
+        c.px(6 + f * 2, 8, hexrgb("#d6ffe0"))
+        c.px(10 - f * 3, 9, hexrgb("#d6ffe0"))
+        c.ellipse(8, 9, 8, 7, (124, 242, 140, 30))
+    elif name == "throne":
+        c.rect(3, 1, 10, 6, hexrgb("#3b2a52"))
+        c.rect(3, 1, 10, 1, gold)
+        c.rect(2, 6, 12, 8, hexrgb("#4a3466"))
+        c.rect(4, 7, 8, 5, hexrgb("#6a4c8a"))
+        c.rect(2, 6, 2, 8, gold)
+        c.rect(12, 6, 2, 8, gold)
+        c.px(8, 3, glow)
+    elif name == "telescope":
+        c.line(3, 12, 8, 8, wood_d)
+        c.line(13, 12, 8, 8, wood_d)
+        c.line(8, 14, 8, 8, wood_d)
+        c.rect(5, 4, 9, 3, hexrgb("#8a6b3a"))
+        c.rect(12, 3, 2, 5, gold)
+    elif name == "chest":
+        c.rect(2, 5, 12, 9, wood_d)
+        c.rect(3, 5, 10, 4, wood_l)
+        c.rect(2, 9, 12, 1, gold)
+        c.rect(7, 8, 2, 3, gold)
+    elif name == "gold":
+        for _ in range(14):
+            x, y = 3 + rnd.randrange(10), 6 + rnd.randrange(7)
+            c.ellipse(x, y, 1.4, 1, gold)
+            c.px(x, y - 1, hexrgb("#fff0b8"))
+    elif name == "map_table":
+        c.ellipse(8, 9, 7, 5, wood_d)
+        c.ellipse(8, 8, 6.5, 4.5, wood_l)
+        c.rect(4, 6, 8, 5, hexrgb("#e6d9b0"))
+        c.line(5, 8, 10, 7, hexrgb("#8a4b3b"))
+        c.px(10, 7, hexrgb("#c23b3b"))
+    elif name == "barrel":
+        c.ellipse(8, 9, 5, 6, wood_d)
+        c.ellipse(8, 7, 4.5, 3.5, wood)
+        c.rect(3, 10, 10, 1, hexrgb("#2b3135"))
+    elif name == "crystal":
+        c.ellipse(8, 12, 5, 2, (0, 0, 0, 80))
+        for (x0, h) in ((6, 8), (9, 10), (11, 6)):
+            c.rect(x0, 12 - h, 2, h, glow)
+            c.px(x0, 12 - h, hexrgb("#e9fff6"))
+        c.ellipse(8, 8, 8, 8, (124, 242, 194, 35))
+    elif name == "candles":
+        for x, h in ((5, 5), (8, 7), (11, 4)):
+            c.rect(x, 12 - h, 2, h, hexrgb("#e8e2cf"))
+            c.px(x, 11 - h, hexrgb("#ffd28a"))
+        c.ellipse(8, 7, 7, 6, (255, 210, 140, 30))
+    elif name == "rack":
+        c.rect(1, 2, 14, 2, wood)
+        c.rect(1, 12, 14, 2, wood)
+        for x in (3, 7, 11):
+            c.line(x, 1, x + 1, 14, hexrgb("#b8c4c8"))
+            c.px(x, 1, gold)
+    elif name == "stool":
+        c.ellipse(8, 9, 3.5, 3, wood_d)
+        c.ellipse(8, 8, 3, 2.5, wood_l)
+    return c.img
+
+
+def build_topdown(manifest):
+    out = ASSETS / "environments"
+    cols = 8
+    rows = math.ceil(len(TD_TILES) / cols)
+    sheet = Image.new("RGBA", (cols * TILE, rows * TILE), (0, 0, 0, 0))
+    index = {}
+    for i, name in enumerate(TD_TILES):
+        sheet.paste(td_tile(name), ((i % cols) * TILE, (i // cols) * TILE))
+        index[name] = i
+    sheet.save(out / "castle-topdown.png")
+    manifest["environments"]["castle-topdown"] = {"image": "environments/castle-topdown.png", "width": sheet.width, "height": sheet.height, "tileSize": TILE, "columns": cols, "tiles": index}
+
+
 def main():
     random.seed(1)
     manifest = {"version": 1, "characters": {}, "monsters": {}, "effects": {}, "environments": {}, "ui": {"appIcon": "ui/app-icon-32.png"}}
@@ -712,6 +927,7 @@ def main():
     build_monsters(manifest)
     build_effects(manifest)
     build_environment(manifest)
+    build_topdown(manifest)
     with open(ASSETS / "manifest.json", "w") as f:
         json.dump(manifest, f, indent=2, ensure_ascii=False)
     print(f"assets written to {ASSETS}")

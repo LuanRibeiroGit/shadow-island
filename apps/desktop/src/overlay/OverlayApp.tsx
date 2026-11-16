@@ -1,13 +1,11 @@
-import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
-import type { Agent, Encounter, SystemInfo } from "@ids/shared";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { Agent, SystemInfo } from "@ids/shared";
 import { activeAgents, encountersFor } from "@ids/event-system";
-import { MessageScheduler, resolveCharacter, SPECIALTY_LABEL, visualFor, type Bubble } from "@ids/game-engine";
-import { formatDuration, formatTokens, sumUsage } from "@ids/analytics";
+import { MessageScheduler, resolveCharacter, type Bubble } from "@ids/game-engine";
 import { backend } from "../bridge/backend";
 import { useWorld } from "../stores/world";
 import { useSettings } from "../stores/settings";
 import { useCharacters } from "../stores/characters";
-import { STATE_LABEL, timeAgo } from "../components/labels";
 import { OverlayScene, type ScreenPos } from "./scene";
 
 /**
@@ -19,7 +17,6 @@ export function OverlayApp() {
   const scene = useRef<OverlayScene | null>(null);
   const [ready, setReady] = useState(false);
   const [positions, setPositions] = useState<ScreenPos[]>([]);
-  const [picked, setPicked] = useState<string | null>(null);
   const [bubbles, setBubbles] = useState<Record<string, Bubble>>({});
   const [opaque, setOpaque] = useState(false);
   const scheduler = useMemo(() => new MessageScheduler(), []);
@@ -44,25 +41,21 @@ export function OverlayApp() {
   useEffect(() => {
     const s = new OverlayScene();
     scene.current = s;
-    s.setCallbacks(setPositions, (id) => setPicked((p) => (p === id ? null : id)));
+    // Clicking a character opens its page in the castle window: the strip stays thin.
+    s.setCallbacks(setPositions, (id) => void backend().then((b) => b.showCastle(`agent/${encodeURIComponent(id)}`)));
     void s.init(host.current!).then(() => setReady(true));
     return () => s.destroy();
   }, []);
 
-  const agents = useMemo(() => {
-    const active = activeAgents(world);
-    if (!settings.desktop.showFinished) return active;
-    // Keep finished agents visible while they celebrate, then they leave.
-    const now = Date.now();
-    const celebrating = world.recentAgents.filter((a) => a.endedAt && now - a.endedAt < 5000);
-    return [...active, ...celebrating];
-  }, [world, settings.desktop.showFinished]);
+  // Only agents that are actually working show up on the desktop: idle and finished
+  // agents are asleep in the castle, so the strip stays empty (and hidden) between tasks.
+  const agents = useMemo(() => activeAgents(world).filter(isWorking), [world]);
   const encounters = useMemo(() => Object.values(world.encounters), [world]);
 
   useEffect(() => {
     if (!ready || !scene.current) return;
     const d = settings.desktop;
-    scene.current.setOptions({ scale: d.characterScale / 2, animationSpeed: d.animationSpeed, animationsEnabled: d.animationsEnabled, walkSpeed: d.walkSpeed }, custom);
+    scene.current.setOptions({ scale: d.characterScale / 2, animationSpeed: d.animationSpeed, animationsEnabled: d.animationsEnabled, walkSpeed: d.walkSpeed, showNames: d.showNames }, custom);
     void scene.current.sync(agents, encounters, Date.now());
   }, [ready, agents, encounters, settings.desktop, custom]);
 
@@ -96,24 +89,19 @@ export function OverlayApp() {
   }, [hasAgents, settings.desktop.overlayEnabled]);
 
   // Report clickable areas so the rest of the strip is click-through.
-  const cardRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const boxes = positions.map((p) => ({ x: Math.round(p.x - p.width / 2), y: Math.round(p.top), width: Math.round(p.width), height: Math.round(p.y - p.top) }));
-    const card = cardRef.current?.getBoundingClientRect();
-    if (card) boxes.push({ x: Math.round(card.left), y: Math.round(card.top), width: Math.round(card.width), height: Math.round(card.height) });
     const key = JSON.stringify(boxes.map((b) => [Math.round(b.x / 8), b.y, b.width, b.height]));
     if (key !== lastBoxes.current) {
       lastBoxes.current = key;
       void backend().then((b) => b.setOverlayHitboxes(boxes));
     }
-  }, [positions, picked]);
+  }, [positions]);
   const lastBoxes = useRef("");
 
-  const pickedAgent = agents.find((a) => a.id === picked);
-  const pickedPos = positions.find((p) => p.id === picked);
 
   return (
-    <div className="overlay-root" onMouseDown={(e) => e.target === e.currentTarget && setPicked(null)}>
+    <div className="overlay-root" data-crew={positions.length}>
       <div ref={host} style={{ position: "absolute", inset: 0 }} />
       {positions.map((p) => {
         const a = agents.find((x) => x.id === p.id);
@@ -122,100 +110,22 @@ export function OverlayApp() {
         const ch = resolveCharacter(a, custom);
         return (
           <div key={p.id}>
-            {b && <div className="bubble" style={{ left: clampX(p.x, 130), top: p.top - 4 }}>{b.text}</div>}
-            <div className="nameplate" style={{ left: clampX(p.x, 60), top: p.y - 2 }}>{ch.name}</div>
+            {b && <div className="bubble" style={{ left: clampX(p.x, 130), top: Math.max(24, p.top + 2) }}>{b.text}</div>}
+            {settings.desktop.showNames && <div className="nameplate" style={{ left: clampX(p.x, 60), top: p.y - 2 }}>{ch.name}</div>}
           </div>
         );
       })}
-      {pickedAgent && pickedPos && (
-        <AgentCard
-          ref={cardRef}
-          agent={pickedAgent}
-          encounter={encountersFor(world, pickedAgent.id)[0]}
-          left={Math.min(Math.max(pickedPos.x, 160), window.innerWidth - 160)}
-          bottom={window.innerHeight - pickedPos.top + 6}
-          onClose={() => setPicked(null)}
-          onHide={() => {
-            void useCharacters.getState().save(`agent:${pickedAgent.id}`, { ...custom[`agent:${pickedAgent.id}`], hidden: true });
-            setPicked(null);
-          }}
-        />
-      )}
     </div>
   );
 }
 
 
-const AgentCard = forwardRef<HTMLDivElement, { agent: Agent; encounter?: Encounter; left: number; bottom: number; onClose: () => void; onHide: () => void }>(
-  function AgentCard({ agent, encounter, left, bottom, onClose, onHide }, ref) {
-    const world = useWorld((s) => s.world);
-    const custom = useCharacters((s) => s.custom);
-    const session = world.sessions[agent.sessionId];
-    const ch = resolveCharacter(agent, custom);
-    const vis = visualFor(agent, Date.now());
-    const [tokens, setTokens] = useState<string>("…");
-    useEffect(() => {
-      let off = false;
-      void backend()
-        .then((b) => b.getAgentDetail(agent.id))
-        .then((d) => {
-          if (off) return;
-          const t = sumUsage(d?.usageByModel ?? []);
-          setTokens(t.records > 0 ? `${formatTokens(t.input + t.cacheCreation + t.cacheRead)} entrada · ${formatTokens(t.output)} saída` : "Indisponível");
-        })
-        .catch(() => setTokens("Indisponível"));
-      return () => {
-        off = true;
-      };
-    }, [agent.id, agent.updatedAt]);
-    return (
-      <div ref={ref} className="agent-card px-frame" style={{ left, bottom }} role="dialog" aria-label={ch.name}>
-        <div className="row" style={{ justifyContent: "space-between" }}>
-          <strong>{ch.name}</strong>
-          <span className="state-tag">{STATE_LABEL[vis.state]}</span>
-        </div>
-        <div className="faint" style={{ fontSize: 11 }}>
-          {agent.isMain ? "Agente principal" : `Subagente · ${agent.agentType ?? "tipo desconhecido"}`} · {SPECIALTY_LABEL[agent.specialty]}
-        </div>
-        <dl>
-          <dt>Sessão</dt>
-          <dd className="mono" title={agent.sessionId}>{agent.sessionId.slice(0, 8)}</dd>
-          <dt>Projeto</dt>
-          <dd>{session?.projectName ?? "Indisponível"}</dd>
-          <dt>Tarefa</dt>
-          <dd title={agent.task ?? ""}>{agent.task ?? "Indisponível"}</dd>
-          <dt>Ferramenta</dt>
-          <dd>{agent.currentTool ? `${agent.currentTool}${agent.detail ? ` · ${agent.detail}` : ""}` : "—"}</dd>
-          <dt>Ativo há</dt>
-          <dd>{formatDuration(Date.now() - agent.startedAt)}</dd>
-          <dt>Tokens</dt>
-          <dd title="Lidos da transcrição do Claude Code; atualizados ao fim de cada resposta">{tokens}</dd>
-          <dt>Último evento</dt>
-          <dd>{agent.lastEvent ? `${agent.lastEvent} · ${timeAgo(agent.updatedAt)}` : "—"}</dd>
-          {encounter && (
-            <>
-              <dt>Obstáculo</dt>
-              <dd style={{ color: "var(--danger)" }}>{encounter.monster.replace(/_/g, " ")}</dd>
-            </>
-          )}
-        </dl>
-        <div className="row">
-          <button className="btn small primary" onClick={() => void backend().then((b) => b.showCastle(`agent/${encodeURIComponent(agent.id)}`))}>
-            Ver detalhes
-          </button>
-          <button className="btn small" onClick={onHide} title="Ocultar este personagem da área de trabalho">
-            Ocultar
-          </button>
-          <button className="btn small" onClick={onClose}>
-            Fechar
-          </button>
-        </div>
-      </div>
-    );
-  },
-);
-
 /** Keep centered labels (translateX(-50%)) inside the strip near its edges. */
 function clampX(x: number, half: number): number {
   return Math.min(Math.max(x, half), Math.max(half, window.innerWidth - half));
+}
+
+const RESTING = new Set(["IDLE", "SUCCESS"]);
+function isWorking(a: Agent): boolean {
+  return !a.endedAt && !RESTING.has(a.state);
 }

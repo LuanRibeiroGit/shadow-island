@@ -74,16 +74,16 @@ function DesktopSection() {
         <h3>Tripulação na área de trabalho</h3>
         <Toggle label="Mostrar personagens perto da barra de tarefas" checked={d.overlayEnabled} onChange={(v) => set({ overlayEnabled: v })} />
         <div className="row" style={{ margin: "8px 0" }}>
-          <Select label="Posição" value={d.placement} onChange={(v) => set({ placement: v })} options={[{ value: "bottom", label: "Embaixo (acima da barra)" }, { value: "top", label: "Em cima" }]} />
+          <Select label="Posição" value={d.placement} onChange={(v) => set({ placement: v })} options={[{ value: "bottom", label: "Logo acima da barra de tarefas" }, { value: "taskbar", label: "Sobre a barra de tarefas (Windows, KDE, X11)" }, { value: "top", label: "Em cima" }]} />
         </div>
-        <Range label="Altura da faixa" value={d.height} min={80} max={320} step={10} format={(v) => `${v}px`} onChange={(v) => set({ height: v })} />
+        <Range label="Altura da faixa" value={d.height} min={48} max={320} step={4} format={(v) => `${v}px`} onChange={(v) => set({ height: v })} />
         <Range label="Largura da faixa" value={d.widthFraction} min={0.2} max={1} step={0.05} format={(v) => `${Math.round(v * 100)}%`} onChange={(v) => set({ widthFraction: v })} />
         <Range label="Tamanho dos personagens" value={d.characterScale} min={1} max={4} step={1} format={(v) => `${v}x`} onChange={(v) => set({ characterScale: v })} />
         <Range label="Velocidade de caminhada" value={d.walkSpeed} min={8} max={80} step={2} format={(v) => `${v}px/s`} onChange={(v) => set({ walkSpeed: v })} />
         <Range label="Velocidade das animações" value={d.animationSpeed} min={0.5} max={2} step={0.1} format={(v) => `${v.toFixed(1)}x`} onChange={(v) => set({ animationSpeed: v })} />
         <Toggle label="Animações" hint="Desligado, os personagens ficam parados (útil para economizar CPU)." checked={d.animationsEnabled} onChange={(v) => set({ animationsEnabled: v })} />
+        <Toggle label="Nomes embaixo dos personagens" hint="Desligado, o nome aparece ao passar o mouse ou clicar." checked={d.showNames} onChange={(v) => set({ showNames: v })} />
         <Toggle label="Balões de fala" checked={d.showMessages} onChange={(v) => set({ showMessages: v })} />
-        <Toggle label="Mostrar agentes recém-concluídos" hint="Eles comemoram por alguns segundos antes de sumir." checked={d.showFinished} onChange={(v) => set({ showFinished: v })} />
         <Toggle label="Linux/Wayland: usar XWayland para a faixa" hint="No Wayland, aplicativos não podem se posicionar nem ficar sempre no topo. Com isso ligado o app usa XWayland. Requer reiniciar." checked={d.preferX11OnWayland} onChange={(v) => set({ preferX11OnWayland: v })} />
       </section>
       <section className="card px-frame">

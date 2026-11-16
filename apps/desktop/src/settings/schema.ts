@@ -23,7 +23,7 @@ export interface Settings {
   };
   desktop: {
     overlayEnabled: boolean;
-    placement: "bottom" | "top";
+    placement: "bottom" | "top" | "taskbar";
     height: number;
     widthFraction: number;
     monitor: string | null;
@@ -32,6 +32,7 @@ export interface Settings {
     walkSpeed: number;
     animationSpeed: number;
     showMessages: boolean;
+    showNames: boolean;
     animationsEnabled: boolean;
     showFinished: boolean;
   };
@@ -71,7 +72,7 @@ export const DEFAULT_SETTINGS: Settings = {
   desktop: {
     overlayEnabled: true,
     placement: "bottom",
-    height: 140,
+    height: 76,
     widthFraction: 1,
     monitor: null,
     preferX11OnWayland: true,
@@ -79,6 +80,7 @@ export const DEFAULT_SETTINGS: Settings = {
     walkSpeed: 28,
     animationSpeed: 1,
     showMessages: true,
+    showNames: false,
     animationsEnabled: true,
     showFinished: true,
   },
