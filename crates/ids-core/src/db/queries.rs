@@ -143,6 +143,7 @@ pub struct UsageBucket {
 pub struct LabeledTokens {
     pub id: String,
     pub label: String,
+    /// Models used (comma-separated when several).
     pub model: Option<String>,
     pub tokens: TokenTotals,
 }
@@ -451,9 +452,9 @@ pub fn usage_timeseries(conn: &Connection, from: i64, to: i64, bucket_ms: i64) -
 
 pub fn tokens_by_session(conn: &Connection, from: i64, limit: i64) -> CoreResult<Vec<LabeledTokens>> {
     let mut st = conn.prepare(&format!(
-        "SELECT u.session_id, COALESCE(p.name, s.cwd, u.session_id), u.model, {TOKENS_SQL}
+        "SELECT u.session_id, COALESCE(s.title, p.name, s.cwd, u.session_id), GROUP_CONCAT(DISTINCT u.model), {TOKENS_SQL}
          FROM usage_records u JOIN sessions s ON s.id = u.session_id LEFT JOIN projects p ON p.id = s.project_id
-         WHERE u.recorded_at >= ?1 GROUP BY u.session_id, u.model ORDER BY SUM(u.input_tokens + u.output_tokens) DESC LIMIT ?2"
+         WHERE u.recorded_at >= ?1 GROUP BY u.session_id ORDER BY SUM(u.input_tokens + u.output_tokens) DESC LIMIT ?2"
     ))?;
     let rows = st.query_map(params![from, limit.clamp(1, 200)], |r| {
         Ok(LabeledTokens { id: r.get(0)?, label: r.get(1)?, model: r.get(2)?, tokens: tokens_at(r, 3)? })
@@ -463,9 +464,9 @@ pub fn tokens_by_session(conn: &Connection, from: i64, limit: i64) -> CoreResult
 
 pub fn tokens_by_agent(conn: &Connection, from: i64, limit: i64) -> CoreResult<Vec<LabeledTokens>> {
     let mut st = conn.prepare(&format!(
-        "SELECT u.agent_id, COALESCE(a.name, u.agent_id), u.model, {TOKENS_SQL}
+        "SELECT u.agent_id, COALESCE(a.name, u.agent_id), GROUP_CONCAT(DISTINCT u.model), {TOKENS_SQL}
          FROM usage_records u LEFT JOIN agents a ON a.id = u.agent_id
-         WHERE u.recorded_at >= ?1 AND u.agent_id IS NOT NULL GROUP BY u.agent_id, u.model
+         WHERE u.recorded_at >= ?1 AND u.agent_id IS NOT NULL GROUP BY u.agent_id
          ORDER BY SUM(u.input_tokens + u.output_tokens) DESC LIMIT ?2"
     ))?;
     let rows = st.query_map(params![from, limit.clamp(1, 200)], |r| {

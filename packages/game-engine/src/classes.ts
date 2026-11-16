@@ -54,7 +54,7 @@ export const SPECIALTY_LABEL: Record<Specialty, string> = {
   general: "Geral",
 };
 
-/** User customization, stored per specialty ("specialty:tester") or per agent. */
+/** User customization, stored per specialty ("specialty:tester", "specialty:main") or per agent ("agent:<id>"). */
 export interface CharacterCustomization {
   name?: string;
   classId?: string;
@@ -75,7 +75,8 @@ export interface ResolvedCharacter {
 }
 
 export function resolveCharacter(agent: Agent, custom: Record<string, CharacterCustomization>): ResolvedCharacter {
-  const bySpecialty = custom[`specialty:${agent.specialty}`] ?? {};
+  // Main agents have their own entry so customizing "Geral" does not repaint them.
+  const bySpecialty = custom[agent.isMain ? "specialty:main" : `specialty:${agent.specialty}`] ?? {};
   const byAgent = custom[`agent:${agent.id}`] ?? {};
   const c: CharacterCustomization = { ...bySpecialty, ...byAgent, palette: { ...bySpecialty.palette, ...byAgent.palette } };
   const defaultClass = agent.isMain ? "lantern_keeper" : BY_SPECIALTY[agent.specialty];
