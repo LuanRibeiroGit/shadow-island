@@ -101,7 +101,7 @@ function DashboardBody({ d, prices, showCosts, asTable }: { d: Dashboard; prices
             label="Custo estimado"
             value={cost.usd !== null ? formatUsd(cost.usd) : null}
             quality="estimated"
-            hint={cost.usd === null ? (prices.length ? "Nenhum modelo usado tem preço configurado" : "Configure preços em Configurações › Métricas") : cost.coverage < 1 ? `Cobre ${(cost.coverage * 100).toFixed(0)}% dos tokens · sem preço: ${cost.unpricedModels.join(", ")}` : undefined}
+            hint={cost.usd === null ? (prices.length ? "Nenhum modelo usado tem preço configurado" : "Configure preços em Configurações › Métricas (há um botão com a tabela da Anthropic)") : cost.coverage < 1 ? `Cobre ${(cost.coverage * 100).toFixed(0)}% dos tokens · sem preço: ${cost.unpricedModels.join(", ")}` : undefined}
           />
         )}
       </div>

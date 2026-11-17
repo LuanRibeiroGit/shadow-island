@@ -14,11 +14,12 @@ export interface RoamBounds {
 
 export const ROAM_MIN_WIDTH = 300;
 const BUBBLE_ROOM = 20;
+const MOB_ROOM = 56;
 const DRAG_THRESHOLD = 4;
 
 export function roamSize(contentWidth: number, scale: number, showNames: boolean): { width: number; height: number } {
   const characterHeight = 48 * scale;
-  return { width: Math.max(Math.round(contentWidth), ROAM_MIN_WIDTH), height: Math.ceil(characterHeight + BUBBLE_ROOM + (showNames ? 16 : 2)) };
+  return { width: Math.max(Math.round(contentWidth + 2 * MOB_ROOM * scale), ROAM_MIN_WIDTH), height: Math.ceil(characterHeight + BUBBLE_ROOM + (showNames ? 16 : 2)) };
 }
 
 export function roamBounds(area: OverlayArea): RoamBounds {

@@ -36,9 +36,9 @@ describe("roaming across the screen", () => {
     expect(nextRoamTarget(10, { min: 50, max: 50 }, 3)).toBe(50);
   });
 
-  it("is tall enough for the speech bubble and wide enough for the line", () => {
+  it("is tall enough for the speech bubble and wide enough for the line and a mob on each side", () => {
     expect(roamSize(64, 1, false)).toEqual({ width: 300, height: 70 });
-    expect(roamSize(640, 2, true)).toEqual({ width: 640, height: 132 });
+    expect(roamSize(640, 2, true)).toEqual({ width: 864, height: 132 });
   });
 
   it("remembers the drop point relative to its monitor", () => {

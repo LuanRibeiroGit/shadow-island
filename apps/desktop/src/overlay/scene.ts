@@ -1,10 +1,11 @@
 // Strict CSP (no unsafe-eval in the webview): Pixi must use its precompiled
 // shader/uniform paths.
 import "pixi.js/unsafe-eval";
-import { Application, Container } from "pixi.js";
+import { Application, Container, Graphics } from "pixi.js";
 import type { Agent, Encounter } from "@ids/shared";
 import { homeX, stepWalker, visualFor, wanderTarget, nextVisualChange, type CharacterCustomization, type Walker } from "@ids/game-engine";
-import { CharacterView, MonsterView, spawnEffect, type ViewOptions } from "../characters/pixi";
+import { CharacterView, MonsterView, drawLifeBar, spawnEffect, type ViewOptions } from "../characters/pixi";
+import { Road } from "./road";
 
 export interface OverlayOptions extends ViewOptions {
   walkSpeed: number;
@@ -45,6 +46,8 @@ export class OverlayScene {
   private onPick: (id: string) => void = () => {};
   private onPress: (id: string, e: PointerEvent) => void = () => {};
   private travel: 1 | -1 | null = null;
+  private road = new Road();
+  private roadFoe: { view: MonsterView; bar: Graphics; x: number; drawnHp: number } | null = null;
   private count = 0;
   private lastEmit = 0;
   private drag: { id: string; dx: number } | null = null;
@@ -88,6 +91,90 @@ export class OverlayScene {
     this.travel = facing;
   }
 
+  get fighting(): boolean {
+    return this.road.fight !== null;
+  }
+
+  walked(px: number, facing: 1 | -1) {
+    if (!this.opts.roam || this.monsters.size > 0 || this.views.size === 0) return;
+    if (this.road.walk(px, facing, Date.now())) this.meetRoadFoe(facing);
+  }
+
+  private meetRoadFoe(side: 1 | -1) {
+    const xs = [...this.walkers.values()].map((w) => w.x);
+    const lead = side === 1 ? Math.max(...xs) : Math.min(...xs);
+    const x = Math.round(lead + side * 40 * this.opts.scale);
+    const view = new MonsterView({ monster: "bug_monster" } as Encounter, "task_shade");
+    view.eventMode = "none";
+    view.position.set(x, this.ground());
+    this.world.addChild(view);
+    const bar = new Graphics();
+    drawLifeBar(bar, 1);
+    this.world.addChild(bar);
+    this.roadFoe = { view, bar, x, drawnHp: 1 };
+    void spawnEffect(this.world, "mist", x, this.ground() - 10, 2 * this.opts.scale);
+    void view.play("attack", 2 * this.opts.scale).then(() => this.faceFoe(view, side));
+    this.refreshAnimations();
+  }
+
+  private faceFoe(view: MonsterView, side: 1 | -1) {
+    view.scale.x = Math.abs(view.scale.x) * -side;
+  }
+
+  private roadAnimation(): string | undefined {
+    const f = this.road.fight;
+    if (!f) return undefined;
+    return f.deadAt === null ? "attack" : "cheer";
+  }
+
+  private viewOptions(): ViewOptions {
+    const animation = this.roadAnimation();
+    return animation ? { ...this.opts, animation } : this.opts;
+  }
+
+  private refreshAnimations() {
+    const now = Date.now();
+    for (const v of this.views.values()) void v.sync(v.agent, this.custom, now, this.viewOptions());
+  }
+
+  private buryRoadFoe(sparkle: boolean) {
+    const foe = this.roadFoe;
+    if (!foe) return;
+    this.roadFoe = null;
+    const { view, bar } = foe;
+    drawLifeBar(bar, 0);
+    view.setHurt(true);
+    void spawnEffect(this.world, sparkle ? "sparkle" : "mist", view.x, view.y - 14 * this.opts.scale, 2 * this.opts.scale);
+    const bury = () => {
+      if (!view.destroyed) view.destroy();
+      if (!bar.destroyed) bar.destroy();
+    };
+    void view.play("vanish", 2 * this.opts.scale).then(() => view.onDone(bury));
+    window.setTimeout(bury, 1500);
+  }
+
+  private stepRoad(now: number, ground: number) {
+    const event = this.road.tick(now);
+    if (event === "dead") {
+      this.buryRoadFoe(true);
+      this.refreshAnimations();
+    } else if (event === "over") {
+      this.refreshAnimations();
+    }
+    const f = this.road.fight;
+    const foe = this.roadFoe;
+    if (!f || !foe) return;
+    const hit = now < f.hitUntil;
+    foe.view.setHurt(hit);
+    foe.view.position.set(foe.x + (hit ? 2 * f.side * this.opts.scale : 0), ground);
+    foe.bar.scale.set(this.opts.scale);
+    foe.bar.position.set(foe.x, ground - 47 * this.opts.scale);
+    if (foe.drawnHp !== f.hp) {
+      foe.drawnHp = f.hp;
+      drawLifeBar(foe.bar, f.hp);
+    }
+  }
+
   private slotOffset(spacing: number): number {
     return this.opts.roam ? Math.max(0, Math.round((this.app.screen.width - this.count * spacing) / 2)) : 0;
   }
@@ -105,6 +192,10 @@ export class OverlayScene {
   async sync(agents: Agent[], encounters: Encounter[], now: number): Promise<void> {
     if (this.destroyed || !this.ready) return;
     const ids = new Set(agents.map((a) => a.id));
+    if (agents.length === 0 || !this.opts.roam) {
+      this.buryRoadFoe(false);
+      this.road.abort();
+    }
     for (const [id, v] of this.views) {
       if (!ids.has(id)) {
         void spawnEffect(this.world, "mist", v.x, v.y - 10, 2);
@@ -152,7 +243,7 @@ export class OverlayScene {
         w.home = offset + slotX(i, spacing);
         if (Math.abs(w.targetX - w.home) > 12 * this.opts.scale) w.targetX = w.home;
       }
-      void v.sync(a, this.custom, now, this.opts);
+      void v.sync(a, this.custom, now, this.viewOptions());
     });
 
     // Monsters: one per active encounter, next to its agent.
@@ -193,7 +284,7 @@ export class OverlayScene {
       window.setTimeout(() => this.views.size === 0 && this.app.ticker.stop(), 1500);
       return;
     }
-    const energetic = agents.some((a) => visualFor(a, now).energetic) || this.monsters.size > 0;
+    const energetic = agents.some((a) => visualFor(a, now).energetic) || this.monsters.size > 0 || this.fighting;
     this.app.ticker.maxFPS = energetic ? 30 : 12;
     if (!this.app.ticker.started) this.app.ticker.start();
   }
@@ -213,10 +304,11 @@ export class OverlayScene {
       if (!vis.moving) w.targetX = w.x; // stop where you are
       const nw = stepWalker(w, dt, this.opts.walkSpeed);
       w.x = nw.x;
-      w.facing = this.travel ?? nw.facing;
+      w.facing = this.road.fight?.side ?? this.travel ?? nw.facing;
       v.setFacing(w.facing);
       v.position.set(Math.round(w.x), ground);
     }
+    this.stepRoad(now, ground);
     for (const m of this.monsters.values()) {
       const w = this.walkers.get(m.encounter.agentId);
       if (w) m.position.set(Math.round(w.x + 46 * this.opts.scale), ground);

@@ -10,6 +10,7 @@ import { useCrew } from "../stores/crew";
 import { OverlayScene, compactWidth, type ScreenPos } from "./scene";
 import { Roamer, freePositionOf, roamSize } from "./roam";
 import { workSpeech } from "../castle/speech";
+import { desktopCrew, nextCrewChange } from "./crew";
 
 /**
  * Desktop overlay window: transparent, borderless strip near the taskbar with one
@@ -78,7 +79,15 @@ export function OverlayApp() {
 
   // Only agents that are actually working show up on the desktop: idle and finished
   // agents are asleep in the castle, so the strip stays empty (and hidden) between tasks.
-  const agents = useMemo(() => activeAgents(world).filter(isWorking), [world]);
+  const [clock, setClock] = useState(0);
+  const agents = useMemo(() => desktopCrew(activeAgents(world), world.recentAgents, Date.now()), [world, clock]);
+  useEffect(() => {
+    const now = Date.now();
+    const at = nextCrewChange([...activeAgents(world), ...world.recentAgents], now);
+    if (at === null) return;
+    const t = window.setTimeout(() => setClock((c) => c + 1), Math.max(50, at - now));
+    return () => window.clearTimeout(t);
+  }, [world, clock]);
   // Working agents wear the name and looks of the crew member doing their job in the castle.
   const custom = useCrew().custom;
   const encounters = useMemo(() => Object.values(world.encounters), [world]);
@@ -156,7 +165,10 @@ export function OverlayApp() {
       last = now;
       const wall = Date.now();
       const walking = agentsRef.current.some((a) => visualFor(a, wall).moving);
-      scene.current?.setTravel(roamer.tick(wall, dt, settings.desktop.walkSpeed, walking));
+      const fighting = scene.current?.fighting ?? false;
+      const facing = roamer.tick(wall, dt, settings.desktop.walkSpeed, walking && !fighting);
+      if (facing !== null) scene.current?.walked((settings.desktop.walkSpeed * dt) / 1000, facing);
+      scene.current?.setTravel(facing);
     }, 50);
     return () => {
       window.clearInterval(t);
@@ -217,9 +229,4 @@ function capturePointer(el: Element, pointerId: number): boolean {
   } catch {
     return false;
   }
-}
-
-const RESTING = new Set(["IDLE", "SUCCESS"]);
-function isWorking(a: Agent): boolean {
-  return !a.endedAt && !RESTING.has(a.state);
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ModelUsage, TokenTotals } from "@ids/shared";
-import { estimateCost, findPrice, pivotUsage, sumUsage, tokensMeasured, validatePrice, formatDuration, formatTokens } from "./index";
+import { ANTHROPIC_PRICES, estimateCost, findPrice, mergeReferencePrices, pivotUsage, sumUsage, tokensMeasured, validatePrice, formatDuration, formatTokens } from "./index";
 
 const t = (input: number, output: number, records = 1): TokenTotals => ({ input, output, cacheCreation: 0, cacheRead: 0, records });
 const prices = [
@@ -33,6 +33,19 @@ describe("pricing", () => {
     expect(e.quality).toBe("estimated");
     expect(e.coverage).toBeCloseTo(0.5);
     expect(e.unpricedModels).toEqual(["other"]);
+  });
+
+  it("ships a valid Anthropic reference table that prices the current models", () => {
+    expect(ANTHROPIC_PRICES.every((p) => validatePrice(p) === null)).toBe(true);
+    expect(findPrice("claude-opus-5-5", ANTHROPIC_PRICES)).toMatchObject({ input: 4, output: 20, cacheWrite: 5, cacheRead: 0.2 });
+    expect(findPrice("claude-fable-5-2", ANTHROPIC_PRICES)).toMatchObject({ input: 8, output: 40, cacheWrite: 10, cacheRead: 0.2 });
+    expect(findPrice("claude-opus-5-20260101", ANTHROPIC_PRICES)?.input).toBe(5);
+  });
+
+  it("merges reference prices without overwriting the user's rows", () => {
+    const merged = mergeReferencePrices([prices[1]!], ANTHROPIC_PRICES);
+    expect(merged.filter((p) => p.model === "claude-opus-5-5")).toEqual([prices[1]]);
+    expect(merged).toHaveLength(ANTHROPIC_PRICES.length);
   });
 
   it("validates price rows", () => {

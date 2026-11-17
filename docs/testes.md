@@ -3,6 +3,28 @@
 Cada rodada de testes concluída é registrada aqui, a mais recente primeiro: o que estava sendo testado, cada comando, o
 resultado e os números. Falhas são copiadas literalmente.
 
+## 2026-11-17 · Main reunida: roaming, Dracula, Grimório e trabalho em andamento
+
+O que mudou: a `feature/roaming-battles` (tripulação livre e tema Dracula) entrou na `main` por merge, junto com o
+Grimório. Por cima foi aplicado o trabalho que estava guardado: batalhas no caminho da tripulação (`overlay/road.ts`,
+`overlay/crew.ts`), comemoração antes de sumir da área de trabalho e preços oficiais da Anthropic. Os conflitos em
+`settings.rs`, `theme.css` e neste arquivo foram resolvidos mantendo os dois lados.
+
+Rodado por: agente `tester`. Comandos Node com Node v22.23.3.
+
+| Comando | Resultado | Números |
+| --- | --- | --- |
+| `pnpm typecheck` | passou | 5 projetos sem erros |
+| `pnpm test` (Vitest) | passou | 62 testes em 13 arquivos |
+| `pnpm test:e2e` (Playwright, backend de demonstração) | passou | 10 testes |
+| `cargo test --workspace` | passou | 70 testes (ids-core 38 + 11 de cenários, ids-hook 3, desktop 18) |
+
+Falhas: nenhuma. Avisos do Vite, que não são erros: "ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1)" e
+"`__dirname` (vite.config.ts:10:51). Use `import.meta.dirname` instead".
+
+Não coberto por teste automático: o app desktop não foi aberto, então o overlay real e o vínculo do Grimório não foram
+vistos funcionando.
+
 ## 2026-11-17 · Grimório: editor das instruções do Claude Code
 
 O que mudou: a página nova Grimório (`apps/desktop/src/grimoire/GrimoirePage.tsx`) edita `instructions/global.md` e
@@ -28,6 +50,83 @@ Não rodou: as suítes Rust inteiras, só os filtros `instructions` e `settings`
 
 Não coberto por teste automático: os comandos Tauri reais (o e2e usa o backend de demonstração) e o vínculo de verdade em
 `~/.claude/CLAUDE.md` e nas pastas dos projetos. O app não foi aberto.
+
+## 2026-11-17 · Preços oficiais da Anthropic
+
+O que mudou: entrou uma tabela de referência com os preços oficiais da Anthropic (`ANTHROPIC_PRICES`) e a função
+`mergeReferencePrices` em `packages/analytics/src/pricing.ts`. Em `apps/desktop/src/settings/PricesSection.tsx` entrou o
+botão "Usar preços oficiais da Anthropic", e `apps/desktop/src/dashboard/DashboardPage.tsx` ganhou um texto de dica.
+Branch `feature/roaming-battles`.
+
+Rodado por: agente `tester`. Typecheck com o Node padrão (v18.20.8). Vitest e Playwright com Node v22.23.3, porque no
+v18 o Vitest não sobe (veja abaixo).
+
+| Comando | Resultado | Números |
+| --- | --- | --- |
+| `pnpm typecheck` | passou | 5 projetos sem erros |
+| `pnpm test` (Vitest, Node v18.20.8) | falhou na inicialização | 0 testes rodaram |
+| `pnpm test` (Vitest, Node v22.23.3) | passou | 62 testes em 13 arquivos |
+| `vitest run packages/analytics/src/analytics.test.ts` | passou | 10 testes (2 novos: tabela de referência Anthropic e merge sem sobrescrever) |
+| `pnpm test:e2e` (Playwright, backend de demonstração) | passou | 9 testes |
+
+Falhas: nenhuma nos testes. O erro de inicialização do Vitest no Node v18, copiado literalmente:
+
+```
+SyntaxError: The requested module 'node:util' does not provide an export named 'styleText'
+```
+
+Não rodou: `cargo test`, porque nenhum código Rust mudou.
+
+Sem teste automático: o botão "Usar preços oficiais da Anthropic" e o texto de dica do dashboard. Nenhum teste e2e usa
+esses dois. Os testes e2e de custo/preço de `apps/desktop/e2e/app.spec.ts` ("dashboard labels data quality and never
+invents a cost" e "configuring a price turns the cost into an estimate") passaram, mas configuram o preço à mão.
+
+## 2026-11-17 · Comemoração antes de sumir da área de trabalho
+
+O que mudou: quem acabou de terminar a tarefa continua no overlay comemorando durante os 4 s de `SUCCESS_HOLD_MS` e só
+depois some. Isso inclui subagentes já encerrados, que ficam em `world.recentAgents`. A lógica fica em
+`apps/desktop/src/overlay/crew.ts`, e o `OverlayApp.tsx` usa `desktopCrew` e `nextCrewChange`, com um timer que
+reavalia a lista quando a comemoração acaba. Branch `feature/roaming-battles`.
+
+Rodado por: agente `tester`. Vitest e Playwright com Node v22.23.3.
+
+| Comando | Resultado | Números |
+| --- | --- | --- |
+| `pnpm typecheck` | passou | 5 projetos sem erros |
+| `pnpm test` (Vitest) | passou | 60 testes em 13 arquivos (5 novos em `crew.test.ts`) |
+| `pnpm test:e2e` (Playwright, backend de demonstração) | passou | 9 testes |
+
+Falhas: nenhuma.
+
+Não rodou: `cargo test`, porque nenhum código Rust mudou.
+
+Sem teste automático: a comemoração na área de trabalho real e o timer do `OverlayApp.tsx`. Só `desktopCrew` e
+`nextCrewChange` têm teste unitário.
+
+## 2026-11-17 · Batalhas no caminho da tripulação livre
+
+O que mudou: enquanto anda pela tela, a tripulação encontra uma sombra a cada 260 a 900 px percorridos e para para
+lutar. Os golpes vêm a cada 444 ms e tiram 20% de vida cada um. A sombra tem barra de vida e pisca em vermelho a cada
+golpe. Quando morre, some com um efeito, a tripulação comemora e volta a andar. A lógica fica em
+`apps/desktop/src/overlay/road.ts` e a integração em `scene.ts` e `OverlayApp.tsx`. A janela ficou mais larga para caber
+a sombra dos dois lados (`roam.ts`). A `drawLifeBar` saiu de `castle/scene.ts` e foi para `characters/pixi.ts`. Branch
+`feature/roaming-battles`.
+
+Rodado por: agente `tester`. Vitest e Playwright com Node v22.23.3.
+
+| Comando | Resultado | Números |
+| --- | --- | --- |
+| `pnpm typecheck` | passou | 5 projetos sem erros |
+| `pnpm test` (Vitest) | passou | 55 testes em 12 arquivos (4 novos em `road.test.ts`) |
+| `pnpm test:e2e` (Playwright, backend de demonstração) | passou | 9 testes |
+
+Falhas: nenhuma.
+
+Não rodou: `cargo test`, porque nenhum código Rust mudou.
+
+Sem teste automático: a luta desenhada no overlay. Ficaram de fora o aparecimento da sombra, a barra de vida, o piscar,
+a morte com efeito e a comemoração. A arena do castelo, que agora importa a `drawLifeBar`, só foi validada pelo
+typecheck.
 
 ## 2026-11-17 · Balão de fala mais baixo na tripulação livre
 

@@ -70,3 +70,34 @@ export function validatePrice(p: ModelPrice): string | null {
   }
   return null;
 }
+
+export const ANTHROPIC_PRICES_AS_OF = "2026-11-03";
+
+const standardRates = (model: string, input: number, output: number, cacheRead = input / 10): ModelPrice => ({
+  model,
+  input,
+  output,
+  cacheWrite: input * 1.25,
+  cacheRead,
+});
+
+export const ANTHROPIC_PRICES: readonly ModelPrice[] = [
+  standardRates("claude-fable-5-2", 8, 40, 0.2),
+  standardRates("claude-fable-5-1", 10, 50),
+  standardRates("claude-fable-5", 10, 50),
+  standardRates("claude-opus-5-5", 4, 20, 0.2),
+  standardRates("claude-opus-5", 5, 25),
+  standardRates("claude-opus-4-8", 5, 25),
+  standardRates("claude-opus-4-7", 5, 25),
+  standardRates("claude-opus-4-6", 5, 25),
+  standardRates("claude-sonnet-5-5", 2, 10, 0.1),
+  standardRates("claude-sonnet-5", 2, 10),
+  standardRates("claude-sonnet-4-6", 3, 15),
+  standardRates("claude-haiku-5-5", 0.1, 0.5),
+  standardRates("claude-haiku-4-5", 1, 5),
+];
+
+export function mergeReferencePrices(current: readonly ModelPrice[], reference: readonly ModelPrice[]): ModelPrice[] {
+  const configured = new Set(current.map((p) => p.model));
+  return [...current, ...reference.filter((p) => !configured.has(p.model))];
+}

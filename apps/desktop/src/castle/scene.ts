@@ -44,7 +44,7 @@ import {
   type CharacterCustomization,
   type Point,
 } from "@ids/game-engine";
-import { CharacterView, MonsterView, spawnEffect } from "../characters/pixi";
+import { CharacterView, MonsterView, drawLifeBar, spawnEffect } from "../characters/pixi";
 import { loadImage, loadManifest } from "../characters/sprites";
 
 export const CASTLE_W = ISO_SIZE.w;
@@ -202,17 +202,6 @@ const SWING_DAMAGE = 0.06;
 const ACTION_DAMAGE = 0.3;
 /** After a shade dies with the task still going, the next one rises this much later. */
 const RESPAWN_MS = 900;
-
-/** Life bar above a task shade; `hp` from 0 to 1. Centred on its origin. */
-function drawLifeBar(g: Graphics, hp: number) {
-  const w = 34;
-  const h = 5;
-  const color = hp > 0.5 ? 0x4fdc8c : hp > 0.25 ? 0xe6c24a : 0xe0503f;
-  g.clear();
-  g.rect(-w / 2 - 1, -h - 1, w + 2, h + 2).fill({ color: 0x050b0d, alpha: 0.9 });
-  g.rect(-w / 2, -h, w, h).fill({ color: 0x3a1418 });
-  if (hp > 0) g.rect(-w / 2, -h, Math.max(1, Math.round(w * hp)), h).fill({ color });
-}
 
 /** Heading to (or sitting in) the bathroom. */
 const toWc = (a: { destKey: string }) => a.destKey.endsWith(":wc");

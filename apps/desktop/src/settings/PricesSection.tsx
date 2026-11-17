@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { validatePrice, type ModelPrice } from "@ids/analytics";
+import { ANTHROPIC_PRICES, ANTHROPIC_PRICES_AS_OF, mergeReferencePrices, validatePrice, type ModelPrice } from "@ids/analytics";
 import { useSettings } from "../stores/settings";
 import { Toggle } from "./controls";
 
@@ -37,6 +37,10 @@ export function PricesSection() {
         O app não traz preços prontos. Informe o valor em USD por milhão de tokens conforme a sua tabela de preços. O nome pode ser um prefixo (por exemplo
         “claude-opus-5” cobre “claude-opus-5-5”); o prefixo mais longo vence. Modelos sem preço ficam como “Indisponível”.
       </p>
+      <div className="row" style={{ alignItems: "center", marginBottom: 10 }}>
+        <button className="btn" onClick={() => setPrices(mergeReferencePrices(metrics.prices, ANTHROPIC_PRICES))}>Usar preços oficiais da Anthropic</button>
+        <span className="faint" style={{ fontSize: 12 }}>Tabela pública da API em {ANTHROPIC_PRICES_AS_OF}. Preços que você já cadastrou são mantidos.</span>
+      </div>
       {metrics.prices.length > 0 && (
         <table className="table" style={{ marginBottom: 10 }}>
           <thead><tr><th>Modelo</th>{FIELDS.map((f) => <th key={f.k}>{f.label}</th>)}<th /></tr></thead>

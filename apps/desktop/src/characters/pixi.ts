@@ -1,4 +1,4 @@
-import { AnimatedSprite, Container, Rectangle, Texture, type TextureSource } from "pixi.js";
+import { AnimatedSprite, Container, Rectangle, Texture, type Graphics, type TextureSource } from "pixi.js";
 import type { Agent, Encounter } from "@ids/shared";
 import { monsterInfo, resolveCharacter, visualFor, type AssetManifest, type CharacterCustomization, type SheetSpec } from "@ids/game-engine";
 import { characterSheet, loadImage, loadManifest } from "./sprites";
@@ -157,4 +157,15 @@ export async function spawnEffect(parent: Container, effect: "sparkle" | "mist",
   s.onComplete = () => s.destroy();
   parent.addChild(s);
   s.play();
+}
+
+/** Life bar above a task shade; `hp` from 0 to 1. Centred on its origin. */
+export function drawLifeBar(g: Graphics, hp: number) {
+  const w = 34;
+  const h = 5;
+  const color = hp > 0.5 ? 0x4fdc8c : hp > 0.25 ? 0xe6c24a : 0xe0503f;
+  g.clear();
+  g.rect(-w / 2 - 1, -h - 1, w + 2, h + 2).fill({ color: 0x050b0d, alpha: 0.9 });
+  g.rect(-w / 2, -h, w, h).fill({ color: 0x3a1418 });
+  if (hp > 0) g.rect(-w / 2, -h, Math.max(1, Math.round(w * hp)), h).fill({ color });
 }
