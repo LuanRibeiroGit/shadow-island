@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { SPECIALTIES, type Agent, type Specialty } from "@ids/shared";
-import { CLASSES, CREW_ROLES, CREW_ROLE_LABEL, SPECIALTY_LABEL, crewKey, crewRoster, newCrewId, resolveCharacter, type CharacterCustomization, type CrewMember, type CrewRole, type Palette } from "@ids/game-engine";
+import { CLASSES, CREW_ROLES, CREW_ROLE_LABEL, SPECIALTY_LABEL, crewKey, crewRoster, kingName, newCrewId, resolveCharacter, type CharacterCustomization, type CrewMember, type CrewRole, type Palette } from "@ids/game-engine";
 import { useCharacters } from "../stores/characters";
 import { useSettings } from "../stores/settings";
 import { useWorld } from "../stores/world";
+import { setCrewRole, useCrew } from "../stores/crew";
+import { KingNameField, KingPortrait } from "../castle/KingProfile";
 import { SpriteCanvas } from "../components/Portrait";
 import { Select } from "../components/Filters";
 import { backend } from "../bridge/backend";
@@ -76,6 +78,21 @@ export function CharactersPage() {
       <p className="sub">A classe padrão vem da especialidade real do agente. Você pode trocar classe, cores, tamanho e visibilidade por especialidade, ou só para um agente.</p>
       <CrewSection custom={custom} frame={anim} />
 
+      <h3 style={{ marginTop: 22 }}>O Rei</h3>
+      <p className="sub">O senhor do castelo. Não é um agente do Claude Code: é um personagem da ilha, e o nome dele é seu para escolher.</p>
+      <div className="char-grid">
+        <section className="card px-frame" style={{ display: "grid", gap: 8 }}>
+          <div className="row" style={{ flexWrap: "nowrap" }}>
+            <KingPortrait size={64} />
+            <div>
+              <strong>{kingName(custom)}</strong>
+              <div className="faint" style={{ fontSize: 12 }}>Senhor do castelo</div>
+            </div>
+          </div>
+          <KingNameField />
+        </section>
+      </div>
+
       <h3 style={{ marginTop: 22 }}>Por especialidade</h3>
       <div className="char-grid">
         {SPECIALTIES.map((s) => (
@@ -147,11 +164,12 @@ function CrewSection({ custom, frame }: { custom: Record<string, CharacterCustom
 
 function CrewCard({ member, value, frame }: { member: CrewMember; value: CharacterCustomization; frame: number }) {
   const save = useCharacters((s) => s.save);
+  const crew = useCrew();
   const [confirming, setConfirming] = useState(false);
   const key = crewKey(member.id);
   return (
     <CustomCard storeKey={key} title={value.name?.trim() || member.defaultName} defaultClass={CREW_DEFAULT_CLASS[member.role]} value={value} frame={frame} nameEditable note={`Tripulante · ${CREW_ROLE_LABEL[member.role]}`}>
-      <Select label="Função" value={member.role} onChange={(r: CrewRole) => void save(key, { ...value, role: r })} options={CREW_ROLES.map((r) => ({ value: r, label: CREW_ROLE_LABEL[r] }))} />
+      <Select label="Função" value={member.role} onChange={(r: CrewRole) => void setCrewRole(crew, member.id, r).catch(() => {})} options={CREW_ROLES.map((r) => ({ value: r, label: CREW_ROLE_LABEL[r] }))} />
       <div className="row" style={{ gap: 8 }}>
         {confirming ? (
           <>

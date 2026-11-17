@@ -367,6 +367,40 @@ def wall(name):
     return c.img
 
 
+def king_statue(scale=2):
+    """The King's own sprite (first idle frame) carved in weathered stone, `scale` times life size."""
+    import king_sprite  # same folder
+
+    if king_sprite.CUSTOM.exists():
+        src = Image.open(king_sprite.CUSTOM).convert("RGBA").crop((0, 0, king_sprite.FW, king_sprite.FH))
+    else:
+        src = king_sprite.frame("idle", 0)
+    lum = lambda p: (0.3 * p[0] + 0.59 * p[1] + 0.11 * p[2]) / 255
+    solid = [src.getpixel((x, y)) for y in range(src.height) for x in range(src.width) if src.getpixel((x, y))[3] >= 128]
+    lo, hi = min(map(lum, solid)), max(map(lum, solid))
+    # Verdigris bronze, so the statue stands out from the grey plaza around it.
+    ramp = [rgb(h) for h in ("#1d3531", "#2c5049", "#3f7265", "#5d9a88", "#9fd6c4")]
+    out = Image.new("RGBA", src.size, (0, 0, 0, 0))
+    for y in range(src.height):
+        for x in range(src.width):
+            p = src.getpixel((x, y))
+            if p[3] < 128:
+                continue
+            # Stretch the sprite's (dark) tones over the ramp, in flat steps.
+            t = ((lum(p) - lo) / max(hi - lo, 0.01)) ** 0.75
+            out.putpixel((x, y), ramp[min(len(ramp) - 1, int(t * len(ramp)))])
+    big = out.resize((src.width * scale, src.height * scale), Image.Resampling.NEAREST)
+    # A dark rim keeps the silhouette readable.
+    rim = big.copy()
+    for y in range(big.height):
+        for x in range(big.width):
+            if big.getpixel((x, y))[3]:
+                continue
+            if any(0 <= x + dx < big.width and 0 <= y + dy < big.height and big.getpixel((x + dx, y + dy))[3] for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))):
+                rim.putpixel((x, y), rgb("#0c1513"))
+    return rim
+
+
 def prop(name):
     c = Iso()
     rnd = random.Random("iso-" + name)
@@ -718,20 +752,16 @@ def prop(name):
         c.ellipse(x, y - 6, 20, 8, rgb("#4fdcae"))
         for k in range(6):
             c.px(x - 16 + k * 6 + (2 if f else 0), y - 6 + (k % 2), rgb("#d6fff0"))
-        # Hooded statue holding a lantern, rising from the pool.
-        c.box(0.5, 0.5, 10, rgb("#5f6b67"), z=6)
-        c.ellipse(x, y - 34, 6, 16, rgb("#6f7d79"))
-        c.ellipse(x + 2, y - 34, 3.5, 15, rgb("#5a6764"))
-        c.ellipse(x, y - 52, 4.6, 4.2, rgb("#7d8b87"))
-        c.px(x - 1, y - 52, GLOW)
-        c.px(x + 1, y - 52, GLOW)
-        c.rect(x + 6, y - 46, 1, 8, rgb("#5a6764"))
-        c.ellipse(x + 6, y - 37, 9, 9, (124, 242, 194, 55))
-        c.ellipse(x + 6, y - 37, 2.4, 3, GLOW)
-        # Spectral water streaming down.
-        for k in range(10):
-            c.px(x - 4 + (k % 2), y - 26 + k * 2, (124, 242, 194, 160))
-            c.px(x + 4 - (k % 2), y - 26 + k * 2, (124, 242, 194, 160))
+        # A stone statue of the King, larger than life, rising from the pool.
+        c.box(0.62, 0.62, 10, rgb("#5f6b67"), z=6)
+        c.box(0.5, 0.5, 3, rgb("#6f7d79"), z=16)
+        statue = king_statue()
+        sx, sy = P(0, 0, 19)
+        c.img.alpha_composite(statue, (int(sx - statue.width / 2), int(sy - statue.height + 2)))
+        # Spectral water spilling from the plinth.
+        for k in range(7):
+            c.px(x - 9 + (k % 2), y - 14 + k * 2, (124, 242, 194, 160))
+            c.px(x + 9 - (k % 2), y - 14 + k * 2, (124, 242, 194, 160))
     elif name.startswith("lantern"):
         f = name.endswith("1")
         c.shadow(0.2)
@@ -777,6 +807,28 @@ def prop(name):
         c.box(0.2, 0.25, 6, rgb("#7b8b88"), z=22, ox=-0.1)
         x, y = P(0.5, 0.3)
         c.box(0.4, 0.2, 5, rgb("#6e7d7a"), ox=0.25, oy=0.4)
+    elif name == "toilet":
+        # Porcelain throne of the island's bathroom: cistern at the back, bowl in front.
+        c.shadow(0.3)
+        white = rgb("#e4ebe8")
+        c.box(0.5, 0.22, 17, white, oy=-0.28)
+        c.box(0.42, 0.46, 8, white, oy=0.1)
+        x, y = P(0, 0.1, 8)
+        c.ellipse(x, y, 5, 2.4, rgb("#9aa8a4"))
+        c.ellipse(x, y, 4, 1.8, rgb("#2a8a6a"))
+        c.ellipse(x, y, 2.6, 1, rgb("#4fdcae"))
+        x, y = P(0.16, -0.17, 13)
+        c.rect(x, y, 2, 1, GOLD)
+    elif name == "sink":
+        c.shadow(0.3)
+        c.box(0.2, 0.2, 9, rgb("#8a9a96"))
+        c.box(0.6, 0.45, 4, rgb("#e4ebe8"), z=9)
+        x, y = P(0, 0.02, 13)
+        c.ellipse(x, y, 5, 2.2, rgb("#9aa8a4"))
+        c.ellipse(x, y, 4, 1.6, rgb("#4fdcae"))
+        x, y = P(0, -0.16, 13)
+        c.rect(x, y - 4, 1, 4, rgb("#b8c4c8"))
+        c.rect(x, y - 4, 2, 1, rgb("#b8c4c8"))
     elif name == "bed":
         c.shadow(0.5)
         c.box(0.7, 0.95, 7, rgb("#5a3d27"))
@@ -849,6 +901,7 @@ PROPS = [
     "barrel", "telescope", "map_table", "forge0", "forge1", "anvil", "cauldron0", "cauldron1", "rack", "bed",
     "sleeper", "zz", "bookshelf_side", "throne_big", "brazier0", "brazier1", "banner_stand", "orb", "potion_tank",
     "knight_statue", "candelabra0", "candelabra1", "fountain0", "fountain1", "lantern0", "lantern1", "tree_dead", "grave", "broken_pillar",
+    "toilet", "sink",
 ]
 
 

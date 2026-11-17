@@ -14,6 +14,7 @@ import { QualityBadge } from "../components/Stat";
 import { EVENT_LABEL, MISSION_CLASS, MISSION_LABEL, ROOM_LABEL, STATE_CLASS, STATE_LABEL, fmtTime, timeAgo } from "../components/labels";
 import { CastleScene } from "./scene";
 import { CharacterProfile } from "./CharacterProfile";
+import { KingProfile } from "./KingProfile";
 import { restorationLevel, RESTORATION_LABEL, RESTORATION_THRESHOLDS } from "./layout";
 import { useT } from "../i18n";
 
@@ -37,6 +38,8 @@ const ROOM_SUB: Record<Room, string> = {
   barracks: "Descanso e espera",
 };
 
+const SIDE_KEY = "ids.castle.side";
+
 export function CastlePage({ room }: { room?: string }) {
   const host = useRef<HTMLDivElement>(null);
   const scene = useRef<CastleScene | null>(null);
@@ -52,6 +55,23 @@ export function CastlePage({ room }: { room?: string }) {
   const selected = (room as Room | undefined) ?? "throne";
   const [named, setNamed] = useState<Room | null>(null);
   const [profile, setProfile] = useState<string | null>(null);
+  const [king, setKing] = useState(false);
+  // The side panel can be closed to give the castle the whole window; the choice is remembered.
+  const [side, setSide] = useState(() => {
+    try {
+      return localStorage.getItem(SIDE_KEY) !== "closed";
+    } catch {
+      return true;
+    }
+  });
+  const showSide = (open: boolean) => {
+    setSide(open);
+    try {
+      localStorage.setItem(SIDE_KEY, open ? "open" : "closed");
+    } catch {
+      // Storage unavailable: the choice just lasts for this visit.
+    }
+  };
 
   useEffect(() => {
     const s = new CastleScene();
@@ -63,6 +83,7 @@ export function CastlePage({ room }: { room?: string }) {
     s.onEmpty = () => setNamed(null);
     // A click on a soul opens its profile: what it is doing, its name and looks.
     s.onAgent = setProfile;
+    s.onKing = () => setKing(true);
     s.onZoom = (z, fit) => setZoom({ zoom: z, fit });
     s.onCamera = setPlates;
     void s.init(host.current!).then(() => setReady(true));
@@ -93,7 +114,7 @@ export function CastlePage({ room }: { room?: string }) {
   }, [ready, agents, encounters, custom, level, selected, settings.desktop.animationSpeed, settings.desktop.animationsEnabled]);
 
   return (
-    <div className="castle-layout">
+    <div className={`castle-layout${side ? "" : " no-side"}`}>
       <div className="castle-stage" data-testid="castle-stage">
         <div ref={host} className="castle-canvas-host" />
         <div className="room-plates" aria-hidden={false}>
@@ -111,23 +132,30 @@ export function CastlePage({ room }: { room?: string }) {
           <span className="mono faint">{Math.round((zoom.zoom / zoom.fit) * 100)}%</span>
           <button className="btn" title="Afastar" aria-label="Afastar" onClick={() => scene.current?.zoomAt(1 / 1.4)}>−</button>
           <button className="btn" title="Ver o castelo inteiro" onClick={() => scene.current?.resetView()}>Ver tudo</button>
+          {!side && <button className="btn" title="Abrir o painel lateral" onClick={() => showSide(true)}>Abrir painel</button>}
         </div>
         <div className="room-hint">
           {RESTORATION_LABEL[level]}
           {completed !== null && level < RESTORATION_THRESHOLDS.length - 1 && ` · ${completed}/${RESTORATION_THRESHOLDS[level + 1]} missões para restaurar mais o castelo`}
         </div>
       </div>
-      <aside className="castle-side">
-        <div className="tabs" role="tablist">
-          {(Object.keys(ROOM_LABEL) as Room[]).filter((r) => !settings.castle.hiddenRooms.includes(r)).map((r) => (
-            <button key={r} role="tab" aria-selected={selected === r} onClick={() => go({ page: "castle", room: r })}>
-              {settings.castle.roomNames[r] || ROOM_LABEL[r]}
-            </button>
-          ))}
-        </div>
-        <RoomPanel room={selected} />
-      </aside>
+      {side && (
+        <aside className="castle-side">
+          <div className="castle-side-head">
+            <div className="tabs" role="tablist">
+              {(Object.keys(ROOM_LABEL) as Room[]).filter((r) => !settings.castle.hiddenRooms.includes(r)).map((r) => (
+                <button key={r} role="tab" aria-selected={selected === r} onClick={() => go({ page: "castle", room: r })}>
+                  {settings.castle.roomNames[r] || ROOM_LABEL[r]}
+                </button>
+              ))}
+            </div>
+            <button className="btn small" title="Fechar o painel lateral" aria-label="Fechar o painel lateral" onClick={() => showSide(false)}>✕</button>
+          </div>
+          <RoomPanel room={selected} />
+        </aside>
+      )}
       {profile && <CharacterProfile id={profile} doing={(id) => scene.current?.describe(id) ?? null} onClose={() => setProfile(null)} />}
+      {king && <KingProfile doing={() => scene.current?.describeKing() ?? null} onClose={() => setKing(false)} />}
     </div>
   );
 }
@@ -260,7 +288,7 @@ function RoomPanel({ room }: { room: Room }) {
         <h3>{title}</h3>
         <p className="dim">{ROOM_BLURB[room]}</p>
         <p className="faint" style={{ fontSize: 12 }}>
-          O balão sobre cada agente mostra a tarefa ou a ferramenta real em uso. A sombra com chifres representa a tarefa em andamento e some quando ela termina. Os outros monstros só aparecem quando há uma falha real.
+          O balão sobre cada agente é ele dizendo o que está fazendo de verdade: a ferramenta em uso e o alvo dela. A sombra com chifres representa a tarefa em andamento e some quando ela termina. Os outros monstros só aparecem quando há uma falha real.
         </p>
         <h4>Trabalhando agora</h4>
         <AgentList ids={working.map((a) => a.id)} />

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ROOMS } from "@ids/shared";
-import { AREAS, BEDS, BedRegistry, DOORS, PROPS, STATIONS, bedsideOf, buildMap, destinationFor, feetOf, findPath, fromIso, isWalkable, isoOfTile, roomOf, stepAlong, tileOf, toIso } from "./castle";
+import { AREAS, BEDS, BedRegistry, DOORS, PROPS, STATIONS, TOILET_SPOTS, bedsideOf, inBathroom, buildMap, destinationFor, feetOf, findPath, fromIso, isWalkable, isoOfTile, roomOf, stepAlong, tileOf, toIso } from "./castle";
 
 const map = buildMap();
 
@@ -27,6 +27,14 @@ describe("castle map", () => {
       for (const list of Object.values(STATIONS)) {
         for (const s of list) expect(findPath(map, from, s), `${from.x},${from.y} -> ${s.x},${s.y}`).not.toBeNull();
       }
+    }
+  });
+
+  it("has a bathroom anyone can walk to from bed", () => {
+    for (const t of TOILET_SPOTS) {
+      expect(isWalkable(map, t)).toBe(true);
+      expect(inBathroom(t.x, t.y)).toBe(true);
+      expect(findPath(map, bedsideOf(map, BEDS[0]!), t)).not.toBeNull();
     }
   });
 

@@ -39,7 +39,22 @@ const DEFAULT_CLASS: Record<CrewRole, string> = {
 export const crewKey = (id: string) => `agent:${id}`;
 export const isCrewId = (id: string) => id.startsWith("crew:");
 
-function defaultName(role: CrewRole, custom: CharacterCustomization | undefined): string {
+/** The King is a character of the castle, not an agent; only his name is the user's to change. */
+export const KING_KEY = "npc:king";
+export const KING_DEFAULT_NAME = "O Rei";
+export const kingName = (custom: Record<string, CharacterCustomization>) => custom[KING_KEY]?.name?.trim() || KING_DEFAULT_NAME;
+
+/**
+ * The crew member with the troubled belly: off duty, it keeps running to the castle's
+ * bathroom. The documentation member, whose function real agents take least often.
+ */
+export const BATHROOM_REGULAR = "crew:documentation";
+
+/** Default members that have a name of their own instead of their class's. */
+const OWN_NAME: Record<string, string> = { [BATHROOM_REGULAR]: "Robson" };
+
+function defaultName(role: CrewRole, custom: CharacterCustomization | undefined, id?: string): string {
+  if (id && OWN_NAME[id]) return OWN_NAME[id];
   const cls = CLASSES[custom?.classId ?? ""] ?? CLASSES[DEFAULT_CLASS[role]];
   return cls?.label ?? CREW_ROLE_LABEL[role];
 }
@@ -52,7 +67,7 @@ export function crewRoster(custom: Record<string, CharacterCustomization>): Crew
     const c = custom[crewKey(id)];
     if (c?.deleted) continue;
     const r = c?.role ?? role;
-    out.push({ id, role: r, defaultName: defaultName(r, c) });
+    out.push({ id, role: r, defaultName: defaultName(r, c, id) });
   }
   const defaults = new Set(CREW_ROLES.map((r) => crewKey(`crew:${r}`)));
   for (const key of Object.keys(custom).sort()) {

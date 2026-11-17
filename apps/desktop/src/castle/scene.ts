@@ -3,11 +3,16 @@
 import "pixi.js/unsafe-eval";
 import { Application, Container, Graphics, Rectangle, Sprite, Text, Texture, type FederatedPointerEvent, type TextureSource } from "pixi.js";
 import { ROOM_LABEL, STATE_LABEL } from "../components/labels";
-import { KING_CURSES, KING_LINES, OUCH_LINES, pick, pickChat, pickLine } from "./chatter";
+import { KING_CURSES, KING_LINES, OUCH_LINES, WC_LINES, WC_RELIEF_LINES, WC_RUSH_LINES, pick, pickChat, pickLine } from "./chatter";
+import { workSpeech } from "./speech";
 import type { Agent, Encounter, Room } from "@ids/shared";
 import {
   AREAS,
+  BATHROOM_REGULAR,
   BEDS,
+  TOILET_SPOTS,
+  inBathroom,
+  kingName,
   BedRegistry,
   ISO_SIZE,
   ISO_W,
@@ -127,6 +132,18 @@ interface Actor {
   stay: number;
   /** The task shade this soul is fighting while it works in the arena. */
   foe: MonsterView | null;
+  /** The shade's life (1 = full) and the bar that shows it. */
+  foeHp: number;
+  foeBar: Graphics | null;
+  /** Life the bar was last drawn with. */
+  foeBarHp: number;
+  foeNextHit: number;
+  /** The shade is red (taking a blow) until this time. */
+  foeHitUntil: number;
+  /** A shade died with the task still going: the next one rises at this time. */
+  foeRespawnAt: number;
+  /** The fighter is swinging its finishing blow until this time. */
+  finisherUntil: number;
   /** Pulsing ring under a working soul. */
   ring: Graphics;
   /** What the work bubble currently says (real task / tool / state). */
@@ -178,6 +195,27 @@ const KING_STEP: Point = { x: 23, y: 5 };
 const KING_SCALE = 1.25;
 
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
+/** A fighter's swing lands this often (its attack animation: 4 frames at 9 fps). */
+const HIT_EVERY_MS = 444;
+/** Life a shade loses to each swing, and to each new real action of the agent. */
+const SWING_DAMAGE = 0.06;
+const ACTION_DAMAGE = 0.3;
+/** After a shade dies with the task still going, the next one rises this much later. */
+const RESPAWN_MS = 900;
+
+/** Life bar above a task shade; `hp` from 0 to 1. Centred on its origin. */
+function drawLifeBar(g: Graphics, hp: number) {
+  const w = 34;
+  const h = 5;
+  const color = hp > 0.5 ? 0x4fdc8c : hp > 0.25 ? 0xe6c24a : 0xe0503f;
+  g.clear();
+  g.rect(-w / 2 - 1, -h - 1, w + 2, h + 2).fill({ color: 0x050b0d, alpha: 0.9 });
+  g.rect(-w / 2, -h, w, h).fill({ color: 0x3a1418 });
+  if (hp > 0) g.rect(-w / 2, -h, Math.max(1, Math.round(w * hp)), h).fill({ color });
+}
+
+/** Heading to (or sitting in) the bathroom. */
+const toWc = (a: { destKey: string }) => a.destKey.endsWith(":wc");
 
 /**
  * The castle seen from above. Each real agent has a bed in the barracks: idle
@@ -218,6 +256,7 @@ export class CastleScene {
   /** A click on the map outside every room. */
   onEmpty: () => void = () => {};
   onAgent: (id: string) => void = () => {};
+  onKing: () => void = () => {};
 
   /** Camera: zoom and pan applied to `root`. `fit` is the zoom that shows the whole castle. */
   private zoom = 1;
@@ -339,10 +378,17 @@ export class CastleScene {
     }
     const sprite = new Sprite(frames.sit?.[0] ?? Texture.EMPTY);
     sprite.anchor.set(sheet.anchorX / sheet.frameWidth, sheet.anchorY / sheet.frameHeight);
-    sprite.eventMode = "none";
+    // A click on him opens his profile (his name is the user's to change).
+    sprite.eventMode = "static";
+    sprite.cursor = "pointer";
+    sprite.hitArea = new Rectangle(-9, -sheet.anchorY, 18, sheet.frameHeight);
+    sprite.on("pointertap", (e) => {
+      e.stopPropagation();
+      if (!this.dragged) this.onKing();
+    });
     this.sortLayer.addChild(sprite);
     const label = this.makeLabel();
-    label.text = "O Rei";
+    label.text = kingName(this.custom);
     label.style.fill = 0xd7b45a;
     this.king = { sprite, frames, label, pos: feetOf(KING_THRONE), path: [], mode: "sitting", until: Date.now() + rnd(8000, 20000), legs: 0, target: null, anim: "sit", animT: 0, facing: 1, bubble: null, bubbleUntil: 0, nextSay: 0, whipped: false };
   }
@@ -469,6 +515,8 @@ export class CastleScene {
     k.sprite.scale.set(KING_SCALE * (k.mode === "sitting" ? 1 : k.facing), KING_SCALE);
     k.sprite.position.set(Math.round(sp.x), Math.round(sp.y - seat));
     k.sprite.zIndex = sp.y + (k.mode === "sitting" ? 1 : 0.5);
+    const name = kingName(this.custom);
+    if (k.label.text !== name) k.label.text = name;
     k.label.scale.set(1 / this.zoom);
     k.label.position.set(sp.x, sp.y - seat - 30 * KING_SCALE);
     if (k.bubble) {
@@ -641,7 +689,8 @@ export class CastleScene {
     const room = (x: number, y: number) => {
       if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) return false;
       const r = this.map.roomAt[y * MAP_W + x];
-      return k(x, y) === "floor" && r !== null && r !== "hall";
+      // The bathroom is no room of the monitor, but it is walled like one.
+      return k(x, y) === "floor" && r !== null && (r !== "hall" || inBathroom(x, y));
     };
     let n = 0;
     for (let y = 0; y < MAP_H; y++) {
@@ -766,7 +815,12 @@ export class CastleScene {
     }
     const bedMap = this.beds.assign([...ids, ...[...this.actors.values()].filter((a) => a.leavingSince !== null).map((a) => a.id)]);
 
+    // Posts already held in the arena are taken before anyone new picks one, so two
+    // agents never end up fighting on the same spot.
     const taken = new Set<string>();
+    for (const actor of this.actors.values()) {
+      if (alive.has(actor.id) && actor.destKey.startsWith(`room:${WORK_ROOM}`)) taken.add(`${actor.dest.x},${actor.dest.y}`);
+    }
     agents.forEach((a, order) => {
       let actor = this.actors.get(a.id);
       const bedIdx = bedMap.get(a.id);
@@ -783,6 +837,8 @@ export class CastleScene {
           actor.strollLeft = 3 + Math.floor(Math.random() * 6);
           actor.idleUntil = now + rnd(3000, 60000);
         }
+        // The bathroom regular cannot hold it for long.
+        if (a.id === BATHROOM_REGULAR) actor.idleUntil = now + rnd(1500, 6000);
       }
       actor.agent = a;
       actor.leavingSince = null;
@@ -802,9 +858,7 @@ export class CastleScene {
       else if (d.kind === "room") {
         // Whatever the activity, work happens in the one arena.
         const key = `room:${WORK_ROOM}`;
-        if (actor.destKey.startsWith(key)) {
-          taken.add(`${actor.dest.x},${actor.dest.y}`);
-        } else {
+        if (!actor.destKey.startsWith(key)) {
           const st = stationFor(WORK_ROOM, taken, order);
           taken.add(`${st.x},${st.y}`);
           this.goTo(actor, st, `${key}:${st.x},${st.y}`);
@@ -870,6 +924,13 @@ export class CastleScene {
       strollLeft: 0,
       stay: 0,
       foe: null,
+      foeHp: 1,
+      foeBar: null,
+      foeBarHp: -1,
+      foeNextHit: 0,
+      foeHitUntil: 0,
+      foeRespawnAt: 0,
+      finisherUntil: 0,
       ring: this.makeRing(),
       workText: "",
       talking: false,
@@ -910,6 +971,7 @@ export class CastleScene {
 
   private animFor(actor: Actor, now: number): string {
     if (now < actor.hurtUntil) return "hurt";
+    if (now < actor.finisherUntil) return "attack";
     if (actor.phase === "walking") return "move";
     if (actor.phase === "sleeping") return "idle";
     if (this.fighting(actor, now)) return "attack";
@@ -988,15 +1050,19 @@ export class CastleScene {
     }
     for (const actor of [...this.actors.values()]) {
       if (actor.phase === "walking") {
-        const s = stepAlong(actor.pos, actor.path, dt, actor.idle ? STROLL_SPEED : WALK_SPEED);
+        // Off duty they amble, except on the way to the bathroom.
+        const s = stepAlong(actor.pos, actor.path, dt, actor.idle && !toWc(actor) ? STROLL_SPEED : WALK_SPEED);
         const sdx = toIso(s).x - toIso(actor.pos).x;
         actor.pos = { x: s.x, y: s.y };
         actor.path = s.path;
         if (Math.abs(sdx) > 0.01) actor.facing = sdx > 0 ? 1 : -1;
         if (actor.path.length === 0) {
           actor.phase = actor.destKey === "bed" ? "sleeping" : "working";
-          // A long sleep (2 to 7 minutes), or the time this spot deserves.
-          actor.idleUntil = now + (actor.phase === "sleeping" ? rnd(120000, 420000) : actor.stay || rnd(6000, 20000));
+          // A long sleep (2 to 7 minutes; the bathroom regular's belly wakes it much sooner),
+          // or the time this spot deserves.
+          const sleep = actor.id === BATHROOM_REGULAR ? rnd(20000, 60000) : rnd(120000, 420000);
+          actor.idleUntil = now + (actor.phase === "sleeping" ? sleep : actor.stay || rnd(6000, 20000));
+          if (toWc(actor)) actor.facing = 1;
         }
       }
       actor.view.setFacing(actor.facing);
@@ -1074,7 +1140,7 @@ export class CastleScene {
     }
     if (actor.workText) this.workLife(actor, now);
     if (actor.phase === "sleeping" && now > actor.idleUntil) {
-      actor.strollLeft = 4 + Math.floor(Math.random() * 6);
+      actor.strollLeft = (actor.id === BATHROOM_REGULAR ? 9 : 4) + Math.floor(Math.random() * 6);
       this.stroll(actor);
     } else if (actor.phase === "working" && strolling && now > actor.idleUntil) {
       if (actor.strollLeft > 0) this.stroll(actor);
@@ -1084,8 +1150,9 @@ export class CastleScene {
     if (strolling && actor.phase !== "sleeping") {
       if (actor.nextSay === 0) actor.nextSay = now + rnd(6000, 30000);
       if (now > actor.nextSay) {
-        this.say(actor, pickLine(), now);
-        actor.nextSay = now + rnd(18000, 50000);
+        const wc = toWc(actor);
+        this.say(actor, wc ? pick(actor.phase === "walking" ? WC_RUSH_LINES : WC_LINES) : pickLine(), now);
+        actor.nextSay = now + (wc ? rnd(3500, 7000) : rnd(18000, 50000));
       }
     }
     this.say(actor, undefined, now);
@@ -1093,6 +1160,19 @@ export class CastleScene {
 
   private stroll(actor: Actor) {
     actor.strollLeft--;
+    const leavingWc = toWc(actor);
+    if (leavingWc) {
+      this.say(actor, pick(WC_RELIEF_LINES), Date.now());
+      actor.nextSay = Date.now() + rnd(8000, 16000);
+    }
+    // The bathroom regular: most of its stops are another run to the toilet.
+    if (actor.id === BATHROOM_REGULAR && !leavingWc && Math.random() < 0.7) {
+      const t = TOILET_SPOTS[Math.floor(Math.random() * TOILET_SPOTS.length)]!;
+      actor.stay = rnd(10000, 22000);
+      actor.nextSay = Date.now() + rnd(400, 1500);
+      this.goTo(actor, t, `stroll:${t.x},${t.y}:wc`);
+      return;
+    }
     // Sometimes they go looking for company instead of a place.
     if (Math.random() < SEEK_COMPANY) {
       const others = [...this.actors.values()].filter((o) => o !== actor && o.idle && !o.talking && o.leavingSince === null && o.phase !== "sleeping" && o.destKey.startsWith("stroll"));
@@ -1115,7 +1195,7 @@ export class CastleScene {
   /** Off-duty souls that cross paths stop, face each other and trade a few lines (sometimes a quarrel). */
   private talkTick(now: number) {
     const free = (a: Actor) =>
-      a.idle && !a.talking && a.leavingSince === null && a.phase !== "sleeping" && a.destKey.startsWith("stroll") && now > a.chatAfter && now > a.hurtUntil && !resolveCharacter(a.agent, this.custom).hidden;
+      a.idle && !a.talking && a.leavingSince === null && a.phase !== "sleeping" && a.destKey.startsWith("stroll") && !toWc(a) && now > a.chatAfter && now > a.hurtUntil && !resolveCharacter(a.agent, this.custom).hidden;
     const list = [...this.actors.values()].filter(free);
     for (let i = 0; i < list.length; i++) {
       const a = list[i]!;
@@ -1194,13 +1274,9 @@ export class CastleScene {
     return s !== "WAITING" && s !== "SUCCESS" && s !== "ERROR" && s !== "IDLE";
   }
 
-  /** What a working agent is really doing: its task, else its tool, else its state. */
+  /** What a working agent says: its real activity, in its own words (see speech.ts). */
   private workLine(a: Agent, now: number): string {
-    const state = visualFor(a, now).state;
-    const what = a.task ?? (a.currentTool ? `${a.currentTool}${a.detail ? ` · ${a.detail}` : ""}` : STATE_LABEL[state]);
-    const line = `${STATE_LABEL[state]}: ${what}`.replace(/\s+/g, " ");
-    const text = what === STATE_LABEL[state] ? what : line;
-    return text.length > 44 ? `${text.slice(0, 43)}…` : text;
+    return workSpeech(a, visualFor(a, now).state);
   }
 
   /**
@@ -1212,6 +1288,11 @@ export class CastleScene {
     const working = !actor.idle && actor.leavingSince === null && visualFor(actor.agent, now).state !== "IDLE";
     const text = working ? this.workLine(actor.agent, now) : "";
     if (text !== actor.workText) {
+      // Each new real action of the agent lands a heavy blow on its task's shade.
+      if (text && actor.foe) {
+        actor.foeHp -= ACTION_DAMAGE;
+        actor.foeHitUntil = now + 220;
+      }
       actor.workText = text;
       actor.bubble?.destroy({ children: true });
       actor.bubble = text ? this.makeBubble(text, 0xd7b45a) : null;
@@ -1232,23 +1313,72 @@ export class CastleScene {
     }
     const hasRealMonster = this.encounters.some((e) => e.agentId === actor.id && e.status === "active");
     const fight = this.fighting(actor, now) && !hasRealMonster;
-    if (fight && !actor.foe) {
+    if (fight && !actor.foe && now >= actor.foeRespawnAt) {
       actor.foe = new MonsterView({ monster: "bug_monster" } as Encounter, "task_shade");
       actor.foe.eventMode = "none";
       this.sortLayer.addChild(actor.foe);
       void actor.foe.play("attack", 1);
       actor.facing = 1;
+      actor.foeHp = 1;
+      actor.foeBar = new Graphics();
+      this.fxLayer.addChild(actor.foeBar);
+      actor.foeBarHp = -1;
+      actor.foeNextHit = now + HIT_EVERY_MS;
     } else if (!fight && actor.foe) {
-      const foe = actor.foe;
-      actor.foe = null;
-      // The task is done (or interrupted): its shade dissolves.
-      void foe.play("vanish", 1).then(() => foe.onDone(() => foe.destroy()));
-      window.setTimeout(() => !foe.destroyed && foe.destroy(), 1500);
+      // The task is done (or interrupted): one last swing, the finishing blow.
+      actor.finisherUntil = now + HIT_EVERY_MS;
+      actor.facing = 1;
+      this.killFoe(actor, true);
+    }
+    if (!fight) actor.foeRespawnAt = 0;
+    if (actor.foe) {
+      // Every swing of the fighter hits: the shade flashes red, recoils and loses life.
+      if (now > actor.foeNextHit) {
+        actor.foeNextHit = now + HIT_EVERY_MS;
+        actor.foeHitUntil = now + 150;
+        actor.foeHp -= SWING_DAMAGE;
+      }
+      // Beaten before the task is over: it dies and, a moment later, another one rises.
+      if (actor.foeHp <= 0) {
+        this.killFoe(actor, false);
+        actor.foeRespawnAt = now + RESPAWN_MS;
+      }
     }
     if (actor.foe) {
-      actor.foe.position.set(Math.round(sp.x + 27), Math.round(sp.y));
+      const hit = now < actor.foeHitUntil;
+      actor.foe.setHurt(hit);
+      actor.foe.position.set(Math.round(sp.x + 27 + (hit ? 2 : 0)), Math.round(sp.y));
       actor.foe.zIndex = sp.y;
+      const bar = actor.foeBar;
+      if (bar) {
+        if (actor.foeBarHp !== actor.foeHp) {
+          actor.foeBarHp = actor.foeHp;
+          drawLifeBar(bar, actor.foeHp);
+        }
+        bar.scale.set(1 / this.zoom);
+        // Just over the shade's head, under the line where the names are written.
+        bar.position.set(sp.x + 27, sp.y - 23.5);
+      }
     }
+  }
+
+  /** The shade takes its last blow and dies. `final`: the finishing blow that ends the task. */
+  private killFoe(actor: Actor, final: boolean) {
+    const foe = actor.foe;
+    const bar = actor.foeBar;
+    if (!foe) return;
+    actor.foe = null;
+    actor.foeBar = null;
+    foe.setHurt(true);
+    foe.x += final ? 7 : 3;
+    if (bar) drawLifeBar(bar, 0);
+    void spawnEffect(this.fxLayer, final ? "sparkle" : "mist", foe.x, foe.y - (final ? 14 : 6), 1);
+    const bury = () => {
+      if (!foe.destroyed) foe.destroy();
+      if (bar && !bar.destroyed) bar.destroy();
+    };
+    void foe.play("vanish", 1).then(() => foe.onDone(bury));
+    window.setTimeout(bury, 1500);
   }
 
   /** What a soul is visibly doing in the castle right now, for its profile. */
@@ -1260,14 +1390,23 @@ export class CastleScene {
     if (a.talking) return "Conversando com outro tripulante";
     if (a.idle || a.leavingSince !== null) {
       if (a.phase === "sleeping") return "Dormindo no alojamento";
+      if (toWc(a)) return a.phase === "walking" ? "Correndo para o banheiro" : "No banheiro";
       if (a.phase === "walking") return a.destKey === "bed" || a.destKey === "floor-nap" ? "Indo dormir" : "Passeando pelo castelo";
       const t = tileOf(a.pos);
       const r = roomOf(this.map, t);
+      if (inBathroom(t.x, t.y)) return "No banheiro";
       return r && r !== "hall" ? `Descansando: ${ROOM_LABEL[r]}` : "Descansando no pátio";
     }
     if (a.phase === "walking") return "A caminho da arena";
     if (this.fighting(a, now)) return "Enfrentando a tarefa na arena";
     return `Na arena: ${STATE_LABEL[visualFor(a.agent, now).state].toLowerCase()}`;
+  }
+
+  /** What the King is doing right now, for his profile. */
+  describeKing(): string | null {
+    const k = this.king;
+    if (!k) return null;
+    return { sitting: "Sentado no trono", strolling: "Passeando pelo reino", chasing: "Indo cobrar um tripulante", whipping: "Dando uma bronca", pausing: "Parado, de olho em tudo", returning: "Voltando ao trono" }[k.mode];
   }
 
   private makeRing(): Graphics {
@@ -1281,6 +1420,7 @@ export class CastleScene {
   private remove(actor: Actor) {
     actor.bubble?.destroy({ children: true });
     actor.foe?.destroy();
+    actor.foeBar?.destroy();
     actor.ring.destroy();
     const sp = toIso(actor.pos);
     void spawnEffect(this.fxLayer, "mist", sp.x, sp.y - 10, 1);

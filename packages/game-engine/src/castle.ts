@@ -48,6 +48,12 @@ export interface Prop {
  */
 export const PLAZA = { x: 23, y: 24, r: 6.5 };
 
+/**
+ * The bathroom, a small walled hut in the island's south-west corner. It is not a
+ * room of the monitor (no agent works there): just a place of the castle.
+ */
+export const BATHROOM: RoomArea = { room: "hall", x: 5, y: 34, w: 4, h: 3, floor: "floor_check" };
+
 export const AREAS: RoomArea[] = [
   { room: "throne", x: 17, y: 3, w: 13, h: 10, floor: "floor_dark" },
   { room: "library", x: 3, y: 8, w: 10, h: 9, floor: "floor_wood" },
@@ -56,7 +62,13 @@ export const AREAS: RoomArea[] = [
   { room: "watchtower", x: 3, y: 22, w: 8, h: 7, floor: "floor_stone" },
   { room: "barracks", x: 15, y: 34, w: 12, h: 8, floor: "floor_wood" },
   { room: "treasury", x: 31, y: 34, w: 9, h: 8, floor: "floor_wood" },
+  BATHROOM,
 ];
+
+/** Tiles in front of each toilet, where a soul in need stands. */
+export const TOILET_SPOTS: Point[] = [{ x: 5, y: 35 }, { x: 7, y: 35 }];
+
+export const inBathroom = (x: number, y: number) => x >= BATHROOM.x && x < BATHROOM.x + BATHROOM.w && y >= BATHROOM.y && y < BATHROOM.y + BATHROOM.h;
 
 interface Opening {
   x: number;
@@ -74,6 +86,7 @@ const OPENINGS: Opening[] = [
   { x: 11, y: 24, w: 1, h: 3 },
   { x: 20, y: 33, w: 3, h: 1 },
   { x: 34, y: 33, w: 2, h: 1 },
+  { x: 9, y: 35, w: 1, h: 1 },
 ];
 
 /** Stone paths from the doors to the plaza (rectangles of path floor). */
@@ -88,6 +101,9 @@ const PATHS: Opening[] = [
   { x: 20, y: 30, w: 3, h: 3 },
   { x: 27, y: 29, w: 3, h: 3 },
   { x: 28, y: 31, w: 8, h: 2 },
+  // The bathroom's lane, down from the watchtower path.
+  { x: 12, y: 27, w: 2, h: 9 },
+  { x: 10, y: 35, w: 2, h: 1 },
 ];
 
 /** Door tiles (every tile of every opening). */
@@ -157,7 +173,9 @@ export const PROPS: Prop[] = [
   ...row("gold", [32, 35, 39], 40, { min: 4 }),
   { tile: "map_table", x: 36, y: 39 },
   ...row("brazier", [31], 41),
-  // Plaza: the spectral fountain and lanterns around it.
+  // Bathroom: two toilets against the back wall, a sink by the door.
+  ...row("toilet", [5, 7], 34),
+  { tile: "sink", x: 8, y: 36 },  // Plaza: the spectral fountain and lanterns around it.
   { tile: "fountain", x: PLAZA.x, y: PLAZA.y },
   ...[
     [18, 20],
@@ -205,8 +223,9 @@ export const STATIONS: Record<Room, Point[]> = {
   throne: [{ x: 22, y: 9 }, { x: 24, y: 9 }, { x: 21, y: 8 }, { x: 25, y: 8 }, { x: 23, y: 10 }, { x: 20, y: 11 }, { x: 26, y: 11 }],
   library: [{ x: 4, y: 11 }, { x: 6, y: 13 }, { x: 8, y: 11 }, { x: 4, y: 14 }, { x: 6, y: 16 }, { x: 10, y: 12 }, { x: 11, y: 9 }],
   forge: [{ x: 35, y: 8 }, { x: 39, y: 8 }, { x: 37, y: 10 }, { x: 41, y: 10 }, { x: 36, y: 12 }, { x: 40, y: 13 }],
-  // Fighters stand two tiles apart, each with room for a foe on its right.
-  laboratory: [22, 24, 26].flatMap((y) => [38, 36, 40].map((x) => ({ x, y }))),
+  // Fighters stand three tiles apart (centre first), each with room for a foe on its right
+  // and its life bar above it, so no two duels overlap.
+  laboratory: [{ x: 39, y: 24 }, { x: 36, y: 21 }, { x: 36, y: 27 }, { x: 39, y: 21 }, { x: 39, y: 27 }, { x: 36, y: 24 }, { x: 42, y: 22 }, { x: 42, y: 26 }],
   watchtower: [{ x: 6, y: 25 }, { x: 5, y: 23 }, { x: 8, y: 24 }, { x: 7, y: 27 }, { x: 4, y: 26 }, { x: 9, y: 26 }],
   treasury: [{ x: 33, y: 35 }, { x: 36, y: 35 }, { x: 34, y: 38 }, { x: 37, y: 38 }, { x: 33, y: 40 }],
   barracks: [{ x: 20, y: 36 }, { x: 20, y: 39 }, { x: 25, y: 37 }],

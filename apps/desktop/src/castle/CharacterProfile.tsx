@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { SPECIALTIES, type Specialty } from "@ids/shared";
-import { CLASSES, CREW_ROLES, CREW_ROLE_LABEL, SPECIALTY_LABEL, crewKey, isCrewId, resolveCharacter, visualFor, type CharacterCustomization, type CrewRole, type Palette } from "@ids/game-engine";
+import { CLASSES, CREW_ROLES, CREW_ROLE_LABEL, SPECIALTY_LABEL, crewKey, isCrewId, pinnedLook, resolveCharacter, visualFor, type CharacterCustomization, type CrewRole, type Palette } from "@ids/game-engine";
 import { useCharacters } from "../stores/characters";
-import { useCrew } from "../stores/crew";
+import { setCrewRole, useCrew } from "../stores/crew";
 import { useWorld } from "../stores/world";
 import { useUi } from "../stores/ui";
 import { backend } from "../bridge/backend";
@@ -16,7 +16,7 @@ import { STATE_CLASS, STATE_LABEL, timeAgo } from "../components/labels";
  * same sheet, its name, function and looks. `id` is the id the castle draws (a crew
  * member or a real agent nobody took); `doing` reads what the scene shows for it.
  */
-export function CharacterProfile({ id, doing, onClose }: { id: string; doing: (id: string) => string | null; onClose: () => void }) {
+export function CharacterProfile({ id: clicked, doing, onClose }: { id: string; doing: (id: string) => string | null; onClose: () => void }) {
   const crew = useCrew();
   const raw = useCharacters((s) => s.custom);
   const save = useCharacters((s) => s.save);
@@ -30,6 +30,8 @@ export function CharacterProfile({ id, doing, onClose }: { id: string; doing: (i
     return () => clearInterval(t);
   }, []);
 
+  // A real agent shown as itself may be taken by a crew member meanwhile: follow it.
+  const id = crew.agents.some((a) => a.id === clicked) ? clicked : ([...crew.realOf].find(([, real]) => real === clicked)?.[0] ?? clicked);
   const agent = crew.agents.find((a) => a.id === id);
   if (!agent) {
     return (
@@ -50,11 +52,23 @@ export function CharacterProfile({ id, doing, onClose }: { id: string; doing: (i
   const session = realId ? sessions[agent.sessionId] : undefined;
   const set = (patch: Partial<CharacterCustomization>) => void save(key, { ...own, ...patch });
   const setColor = (k: keyof Palette, v: string) => set({ palette: { ...own.palette, [k]: v } });
+  const fail = (e: unknown) => setError(e instanceof Error ? e.message : String(e));
+  // Changing the function never changes the character: its looks are written down first.
+  const setRole = (r: CrewRole) => {
+    setError(null);
+    // The agent it works for changes function with it; being the main agent of a session cannot change.
+    if (realId && (agent.isMain || r === "main")) {
+      setError(agent.isMain ? "Este tripulante está fazendo o trabalho do agente principal de uma sessão. A função dele só pode mudar quando a sessão terminar." : "Um subagente não pode virar o agente principal da sessão.");
+      return;
+    }
+    void setCrewRole(crew, id, r).catch(fail);
+  };
   const setSpecialty = (s: Specialty) => {
     setError(null);
-    void backend()
+    void save(key, pinnedLook(agent, raw))
+      .then(backend)
       .then((b) => b.setAgentSpecialty(id, s))
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
+      .catch(fail);
   };
   const open = (route: Parameters<typeof go>[0]) => {
     onClose();
@@ -131,7 +145,7 @@ export function CharacterProfile({ id, doing, onClose }: { id: string; doing: (i
             />
           </label>
           {member ? (
-            <Select label="Função" value={member.role} onChange={(r: CrewRole) => set({ role: r })} options={CREW_ROLES.map((r) => ({ value: r, label: CREW_ROLE_LABEL[r] }))} />
+            <Select label="Função" value={member.role} onChange={setRole} options={CREW_ROLES.map((r) => ({ value: r, label: CREW_ROLE_LABEL[r] }))} />
           ) : (
             <Select label="Função" value={agent.specialty} onChange={setSpecialty} options={SPECIALTIES.map((s) => ({ value: s, label: SPECIALTY_LABEL[s] }))} />
           )}

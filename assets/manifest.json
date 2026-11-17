@@ -1092,7 +1092,9 @@
         "lantern1": 94,
         "tree_dead": 95,
         "grave": 96,
-        "broken_pillar": 97
+        "broken_pillar": 97,
+        "toilet": 98,
+        "sink": 99
       }
     },
     "king": {

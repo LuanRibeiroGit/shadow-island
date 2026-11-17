@@ -93,10 +93,13 @@ export class CharacterView extends Container {
   }
 }
 
+const HURT_TINT = 0xff4a4a;
+
 export class MonsterView extends Container {
   private sprite: AnimatedSprite | null = null;
   encounter: Encounter;
   private anim = "";
+  private hurt = false;
 
   /** `spriteId` overrides the sprite (used for the arena's task shade, which is no encounter). */
   constructor(encounter: Encounter, private spriteId?: string) {
@@ -122,7 +125,15 @@ export class MonsterView extends Container {
     this.sprite.loop = a?.loop ?? true;
     this.sprite.animationSpeed = (a?.fps ?? 6) / 60;
     this.sprite.gotoAndPlay(0);
+    this.sprite.tint = this.hurt ? HURT_TINT : 0xffffff;
     this.scale.set(-scale, scale); // monsters face the hero
+  }
+
+  /** Red while it is taking a blow. */
+  setHurt(hurt: boolean) {
+    if (hurt === this.hurt) return;
+    this.hurt = hurt;
+    if (this.sprite) this.sprite.tint = hurt ? HURT_TINT : 0xffffff;
   }
 
   onDone(cb: () => void) {

@@ -211,6 +211,10 @@ pre.diff .del { color: var(--danger); }
 .castle-stage canvas { max-width: 100%; max-height: 100%; }
 .castle-side { border-left: 2px solid var(--line); overflow: auto; padding: 16px; background: var(--bg-2); }
 .castle-side h3 { margin: 0 0 4px; }
+.castle-layout.no-side { grid-template-columns: 1fr; grid-template-rows: 1fr; }
+.castle-side-head { display: flex; align-items: flex-start; gap: 8px; }
+.castle-side-head .tabs { flex: 1; min-width: 0; }
+.castle-side-head .btn { flex: none; }
 .room-hint { position: absolute; left: 12px; bottom: 10px; font-size: 12px; color: var(--text-faint); }
 .agent-row { display: grid; grid-template-columns: 40px 1fr auto; gap: 10px; align-items: center; padding: 8px; cursor: pointer; }
 .agent-row:hover { background: #ffffff08; }

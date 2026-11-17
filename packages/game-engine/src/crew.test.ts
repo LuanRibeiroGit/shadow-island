@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Agent } from "@ids/shared";
+import { pinnedLook, resolveCharacter } from "./classes";
 import { crewKey, crewRoster, embodyCrew, newCrewId } from "./crew";
 
 const agent = (id: string, over: Partial<Agent> = {}): Agent => ({
@@ -12,7 +13,7 @@ const agent = (id: string, over: Partial<Agent> = {}): Agent => ({
   isMain: false,
   name: id,
   cwd: null,
-  state: "WORKING",
+  state: "CODING",
   activity: null,
   currentTool: null,
   detail: null,
@@ -60,5 +61,16 @@ describe("crew", () => {
     expect(roster.find((m) => m.id === "crew:tester")).toBeUndefined();
     expect(roster.filter((m) => m.role === "developer")).toHaveLength(2);
     expect(roster.find((m) => m.id === id)!.role).toBe("tester");
+  });
+
+  it("changing a member's function keeps the character it was", () => {
+    const before = crewRoster({}).find((m) => m.id === "crew:tester")!;
+    const resting = embodyCrew([before], [], new Map(), 0).agents[0]!;
+    const custom = { [crewKey("crew:tester")]: { ...pinnedLook(resting, {}), role: "developer" as const } };
+    const after = crewRoster(custom).find((m) => m.id === "crew:tester")!;
+    expect(after.role).toBe("developer");
+    expect(after.defaultName).toBe(before.defaultName);
+    const shown = embodyCrew([after], [], new Map(), 0).agents[0]!;
+    expect(resolveCharacter(shown, custom).cls.id).toBe("mist_alchemist");
   });
 });

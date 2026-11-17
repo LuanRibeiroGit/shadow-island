@@ -79,6 +79,24 @@ export interface ResolvedCharacter {
   hidden: boolean;
 }
 
+/**
+ * The agent's own customization with its current looks written down (class, colours,
+ * size and a name given to its kind), so that changing its function afterwards
+ * changes only the function: the character stays who it is.
+ */
+export function pinnedLook(agent: Agent, custom: Record<string, CharacterCustomization>): CharacterCustomization {
+  const kind = custom[agent.isMain ? "specialty:main" : `specialty:${agent.specialty}`] ?? {};
+  const own = custom[`agent:${agent.id}`] ?? {};
+  const look: CharacterCustomization = { ...own, classId: resolveCharacter(agent, custom).cls.id };
+  const name = own.name?.trim() || kind.name?.trim();
+  if (name) look.name = name;
+  const palette = { ...kind.palette, ...own.palette };
+  if (Object.keys(palette).length) look.palette = palette;
+  const scale = own.scale ?? kind.scale;
+  if (scale !== undefined) look.scale = scale;
+  return look;
+}
+
 export function resolveCharacter(agent: Agent, custom: Record<string, CharacterCustomization>): ResolvedCharacter {
   // Main agents have their own entry so customizing "Geral" does not repaint them.
   const bySpecialty = custom[agent.isMain ? "specialty:main" : `specialty:${agent.specialty}`] ?? {};

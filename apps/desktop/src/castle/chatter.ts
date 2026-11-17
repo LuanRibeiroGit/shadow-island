@@ -72,6 +72,37 @@ export const KING_CURSES = [
 /** What a soul answers to the whip. */
 export const OUCH_LINES = ["Ai!", "Ui!", "Já vou, já vou!", "Calma, majestade!", "Isso dói!", "Tô indo!", "Ô loco!", "Ai, minhas costas!"];
 
+/** The bathroom regular, hurrying there. */
+export const WC_RUSH_LINES = [
+  "Sai da frente, é urgente!",
+  "Não vai dar tempo!",
+  "Ai, minha barriga...",
+  "Tô ruim da barriga!",
+  "De novo não...",
+  "Licença, licença, licença!",
+  "Foi aquele ensopado...",
+  "Segura, segura, segura!",
+];
+
+/** ...and once he is sitting there. */
+export const WC_LINES = [
+  "Tô ruim da barriga...",
+  "Ocupado!",
+  "Tem gente!",
+  "Cadê o papel?!",
+  "Acabou o papel!",
+  "Ai ai ai...",
+  "Nunca mais como aquilo.",
+  "Alguém traz papel, por favor!",
+  "Isso não é normal...",
+  "Vai demorar.",
+  "Ufff...",
+  "Não entra ninguém!",
+];
+
+/** ...and on his way out. */
+export const WC_RELIEF_LINES = ["Ufa, que alívio.", "Não entrem lá agora.", "Dez minutos, no mínimo.", "Agora vai.", "Acho que passou.", "Abram a janela..."];
+
 export const pick = (list: readonly string[], rand: () => number = Math.random): string => list[Math.floor(rand() * list.length)]!;
 
 /** Small talk when two off-duty souls meet. Lines alternate: first soul, second soul, ... */

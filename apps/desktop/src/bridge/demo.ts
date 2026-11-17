@@ -52,7 +52,8 @@ export function createDemoBackend(): Backend {
     const batch = doc.steps[step];
     if (batch) {
       const offset = Date.now() - (doc.baseTime + step * 4000);
-      const shifted = shift(batch, offset);
+      // A function the user gave an agent survives the replay, as it does in the real engine.
+      const shifted = shift(batch, offset).map((u) => (u.type === "agent" && specialties.has(u.agent.id) ? { ...u, agent: { ...u.agent, specialty: specialties.get(u.agent.id)! } } : u));
       listeners.forEach((l) => l(shifted));
     }
     step += 1;
