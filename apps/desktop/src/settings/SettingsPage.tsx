@@ -59,7 +59,7 @@ function GeneralSection() {
         <input className="input mono" style={{ width: 240 }} defaultValue={g.toggleShortcut} maxLength={60} onBlur={(e) => e.target.value.trim() && set({ toggleShortcut: e.target.value.trim() })} />
       </label>
       <div className="row" style={{ marginTop: 10 }}>
-        <Select label="Tema" value={g.theme} onChange={(v) => set({ theme: v })} options={[{ value: "shadow", label: "Névoa espectral" }, { value: "dusk", label: "Crepúsculo" }, { value: "contrast", label: "Alto contraste" }]} />
+        <Select label="Tema" value={g.theme} onChange={(v) => set({ theme: v })} options={[{ value: "shadow", label: "Névoa espectral" }, { value: "dusk", label: "Crepúsculo" }, { value: "contrast", label: "Alto contraste" }, { value: "dracula", label: "Dracula" }]} />
         <Select label="Idioma" value={g.language} onChange={(v) => set({ language: v })} options={[{ value: "pt-BR", label: "Português (Brasil)" }, { value: "en", label: "English (parcial)" }]} />
       </div>
       <Toggle label="Modo compacto" checked={g.compactMode} onChange={(v) => set({ compactMode: v })} />

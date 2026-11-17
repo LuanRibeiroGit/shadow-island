@@ -3,6 +3,40 @@
 Cada rodada de testes concluída é registrada aqui, a mais recente primeiro: o que estava sendo testado, cada comando, o
 resultado e os números. Falhas são copiadas literalmente.
 
+## 2026-11-17 · Tema Dracula
+
+O que mudou: novo tema `dracula`, com a paleta do Dracula do VS Code. Ele entrou no tipo `theme`
+(`apps/desktop/src/settings/schema.ts`), virou uma opção no seletor de tema (`apps/desktop/src/settings/SettingsPage.tsx`)
+e ganhou um bloco `:root[data-theme="dracula"]` com variáveis e overrides de componentes
+(`apps/desktop/src/styles/theme.css`). Branch `feature/dracula-theme`.
+
+Rodado por: agente `tester`.
+
+| Comando | Resultado | Números |
+| --- | --- | --- |
+| `pnpm typecheck` (Node v18.20.8) | passou | 5 projetos sem erros |
+| `pnpm test` (Vitest, Node v22.23.3) | passou | 44 testes em 10 arquivos, 0 pulados |
+| `pnpm test:e2e` (Playwright, Node v22.23.3) | passou | 9 testes (8 em `app.spec.ts`, 1 em `csp.spec.ts`), 0 pulados |
+
+Falhas de ambiente, já contornadas:
+
+- Com o Node padrão do shell (v18.20.8) o Vitest não executou nenhum teste. O erro veio de `rolldown@1.2.19`:
+  ```
+  SyntaxError: The requested module 'node:util' does not provide an export named 'styleText'
+      at ModuleJob._instantiate (node:internal/modules/esm/module_job:123:21)
+  ```
+  A suíte rodou depois com o Node v22.23.3 do nvm, trocado só no PATH daquele comando. O repositório não tem `.nvmrc`
+  nem `engines`.
+- Na primeira tentativa os 9 testes do Playwright falharam com
+  `browserType.launch: Executable doesn't exist at /home/luan-ribeiro/.cache/ms-playwright/chromium_headless_shell-1255/chrome-headless-shell-linux64/chrome-headless-shell`.
+  O navegador foi instalado com `pnpm --filter @ids/desktop exec playwright install chromium-headless-shell` e os 9
+  passaram.
+
+Não rodou: `cargo test --workspace`, porque nenhum código Rust mudou.
+
+Sem teste automático: nenhum teste cobre temas. Ficaram de fora a opção nova no seletor, a aplicação de
+`data-theme="dracula"` e o resultado visual. A rodada mostra apenas que as outras telas continuam funcionando.
+
 ## 2026-11-16 · Combate da arena: mais dano, renascimento e golpe final
 
 O que mudou: a sombra da tarefa perde 6% de vida por golpe e 30% a cada ação nova do agente; quando a vida zera com a

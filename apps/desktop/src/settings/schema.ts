@@ -11,7 +11,7 @@ export interface Settings {
     openCastleOnStart: boolean;
     toggleShortcut: string;
     language: "pt-BR" | "en";
-    theme: "shadow" | "dusk" | "contrast";
+    theme: "shadow" | "dusk" | "contrast" | "dracula";
     compactMode: boolean;
   };
   claude: {

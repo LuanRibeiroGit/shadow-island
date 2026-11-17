@@ -53,6 +53,29 @@
   --accent: #6dffd0;
 }
 
+:root[data-theme="dracula"] {
+  --bg: #282a36;
+  --bg-2: #21222c;
+  --panel-solid: #21222c;
+  --panel-2: #343746;
+  --line: #191a21;
+  --line-strong: #44475a;
+  --text: #f8f8f2;
+  --text-dim: #c6c8d8;
+  --text-faint: #6272a4;
+  --accent: #bd93f9;
+  --accent-dim: #6272a4;
+  --gold: #ffb86c;
+  --danger: #ff5555;
+  --warn: #ffb86c;
+  --ok: #50fa7b;
+  --info: #8be9fd;
+  --q-real: #50fa7b;
+  --q-calculated: #8be9fd;
+  --q-estimated: #f1fa8c;
+  --q-unavailable: #6272a4;
+}
+
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; margin: 0; }
 body {
@@ -279,3 +302,50 @@ label.field select { background: #0a1517; color: var(--text); border: 2px solid 
 label.field select:focus { outline: none; border-color: var(--accent-dim); }
 input[type="range"] { accent-color: var(--accent-dim); }
 input[type="checkbox"] { accent-color: var(--accent-dim); }
+
+:root[data-theme="dracula"] .sidebar { background: #21222c; border-right-color: #191a21; }
+:root[data-theme="dracula"] .nav-btn:hover { background: #44475a75; }
+:root[data-theme="dracula"] .nav-btn[aria-current="page"] { background: #44475a; color: #f8f8f2; box-shadow: inset 3px 0 0 #ff79c6; }
+:root[data-theme="dracula"] .brand h1 { color: #ff79c6; }
+:root[data-theme="dracula"] a, :root[data-theme="dracula"] button.link { color: #8be9fd; }
+:root[data-theme="dracula"] .btn { background: #44475a; box-shadow: 0 -2px 0 0 #6272a4, 0 2px 0 0 #191a21, -2px 0 0 0 #6272a4, 2px 0 0 0 #191a21; }
+:root[data-theme="dracula"] .btn:hover { background: #565970; }
+:root[data-theme="dracula"] .btn.primary { background: #bd93f9; color: #282a36; }
+:root[data-theme="dracula"] .btn.primary:hover { background: #caa8fb; }
+:root[data-theme="dracula"] .btn.danger { background: #ff5555; color: #282a36; }
+:root[data-theme="dracula"] .input,
+:root[data-theme="dracula"] select.input,
+:root[data-theme="dracula"] label.field select,
+:root[data-theme="dracula"] .toggle { background: #282a36; border-color: #191a21; }
+:root[data-theme="dracula"] .input:focus,
+:root[data-theme="dracula"] label.field select:focus { border-color: #6272a4; }
+:root[data-theme="dracula"] .table tr.clickable:hover td,
+:root[data-theme="dracula"] .agent-row:hover { background: #44475a75; }
+:root[data-theme="dracula"] .tag { background: #44475a; }
+:root[data-theme="dracula"] .tag.ok { background: #50fa7b1f; }
+:root[data-theme="dracula"] .tag.err { background: #ff55551f; }
+:root[data-theme="dracula"] .tag.warn { background: #ffb86c1f; }
+:root[data-theme="dracula"] .tag.info { background: #8be9fd1f; }
+:root[data-theme="dracula"] .state-tag { background: #44475a; }
+:root[data-theme="dracula"] .banner { background: #f1fa8c26; color: #f1fa8c; border-bottom-color: #f1fa8c55; }
+:root[data-theme="dracula"] .error-box { background: #ff555526; color: #ffb3b3; }
+:root[data-theme="dracula"] .ok-box { background: #50fa7b1f; color: #c8ffd6; border-left-color: #50fa7b; }
+:root[data-theme="dracula"] .modal-backdrop { background: #191a21b3; }
+:root[data-theme="dracula"] pre.diff,
+:root[data-theme="dracula"] .diff,
+:root[data-theme="dracula"] .logs,
+:root[data-theme="dracula"] .castle-stage { background: #191a21; }
+:root[data-theme="dracula"] .diff .add { background: #50fa7b1a; }
+:root[data-theme="dracula"] .diff .del { background: #ff55551a; }
+:root[data-theme="dracula"] .tabs button[aria-selected="true"] { color: #f8f8f2; border-color: #ff79c6; }
+:root[data-theme="dracula"] .toggle:checked::after { background: #50fa7b; }
+:root[data-theme="dracula"] .toggle:checked { border-color: #50fa7b; }
+:root[data-theme="dracula"] body.overlay-body.opaque { background: #282a36e6; }
+:root[data-theme="dracula"] .bubble { background: #21222cf2; }
+:root[data-theme="dracula"] .room-plate { background: #282a36e6; border-color: #44475a; box-shadow: 0 0 0 2px #191a21, 0 0 14px #bd93f922; }
+:root[data-theme="dracula"] .room-plate b { color: #f8f8f2; }
+:root[data-theme="dracula"] .room-plate span { color: #ffb86c; }
+:root[data-theme="dracula"] .room-plate.on { border-color: #bd93f9; box-shadow: 0 0 0 2px #191a21, 0 0 16px #bd93f955; }
+:root[data-theme="dracula"] .room-plate:hover { border-color: #ff79c6; }
+:root[data-theme="dracula"] .castle-zoom { background: #21222cd9; }
+:root[data-theme="dracula"] ::selection { background: #44475a; }
