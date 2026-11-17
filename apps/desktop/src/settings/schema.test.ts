@@ -13,4 +13,10 @@ describe("settings schema", () => {
     expect(mergeSettings({ desktop: { monitor: "HDMI-1" } }).desktop.monitor).toBe("HDMI-1");
     expect(mergeSettings(null).metrics.prices).toEqual([]);
   });
+  it("roams freely by default and remembers where the crew was dropped", () => {
+    expect(mergeSettings({}).desktop.roam).toBe(true);
+    expect(mergeSettings({}).desktop.freePosition).toBeNull();
+    const dropped = { monitor: "HDMI-1", x: 40, bottom: 900 };
+    expect(mergeSettings({ desktop: { freePosition: dropped } }).desktop.freePosition).toEqual(dropped);
+  });
 });

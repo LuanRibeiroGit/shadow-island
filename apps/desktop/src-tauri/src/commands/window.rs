@@ -1,6 +1,6 @@
 //! Window commands used by the castle and the overlay.
 
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, LogicalPosition, Manager, State};
 
 use super::CmdResult;
 use crate::platform::Rect;
@@ -17,7 +17,11 @@ pub fn show_castle(app: AppHandle, route: Option<String>) -> CmdResult<()> {
 }
 
 #[tauri::command]
-pub fn set_overlay_visible(app: AppHandle, visible: bool) -> CmdResult<()> {
+pub fn set_overlay_visible(app: AppHandle, state: State<'_, AppState>, visible: bool) -> CmdResult<()> {
+    let shown = app.get_webview_window(windows::OVERLAY).and_then(|w| w.is_visible().ok()).unwrap_or(false);
+    if visible && shown && state.backend_settings().desktop.roam {
+        return Ok(());
+    }
     windows::set_overlay_visible(&app, visible);
     Ok(())
 }
@@ -35,20 +39,45 @@ pub fn set_overlay_hitboxes(state: State<'_, AppState>, boxes: Vec<Rect>) -> Cmd
 
 /// The overlay reports how wide its souls are, so the strip can shrink to them.
 #[tauri::command]
-pub fn set_overlay_content_width(app: AppHandle, state: State<'_, AppState>, width: u32) -> CmdResult<()> {
+pub fn set_overlay_content_width(app: AppHandle, state: State<'_, AppState>, width: u32, height: Option<u32>) -> CmdResult<()> {
     let width = width.clamp(48, 8192);
+    let height = height.map(|h| h.clamp(32, 2048));
     {
-        let mut g = state.overlay_content_width.lock().map_err(|_| "lock")?;
-        if *g == Some(width) {
+        let mut w = state.overlay_content_width.lock().map_err(|_| "lock")?;
+        let mut h = state.overlay_content_height.lock().map_err(|_| "lock")?;
+        if *w == Some(width) && (height.is_none() || *h == height) {
             return Ok(());
         }
-        *g = Some(width);
+        *w = Some(width);
+        if height.is_some() {
+            *h = height;
+        }
     }
     if let Some(w) = app.get_webview_window(windows::OVERLAY) {
-        if state.backend_settings().desktop.auto_width {
+        let desktop = state.backend_settings().desktop;
+        if desktop.roam {
+            if w.is_visible().unwrap_or(false) {
+                windows::resize_roaming_overlay(&app, &w);
+            }
+        } else if desktop.auto_width {
             windows::position_overlay(&app, &w);
         }
     }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn overlay_area(app: AppHandle) -> CmdResult<serde_json::Value> {
+    let w = app.get_webview_window(windows::OVERLAY).ok_or("no overlay")?;
+    let window = windows::window_rect(&w).ok_or("overlay has no size yet")?;
+    let area = windows::overlay_monitor_area(&w).ok_or("no monitor")?;
+    Ok(serde_json::json!({ "name": area.name, "window": window, "monitor": area.monitor, "work": area.work }))
+}
+
+#[tauri::command]
+pub fn move_overlay(app: AppHandle, x: i32, y: i32) -> CmdResult<()> {
+    let w = app.get_webview_window(windows::OVERLAY).ok_or("no overlay")?;
+    w.set_position(LogicalPosition::new(x as f64, y as f64)).map_err(|e| e.to_string())?;
     Ok(())
 }
 

@@ -11,7 +11,7 @@ export interface Settings {
     openCastleOnStart: boolean;
     toggleShortcut: string;
     language: "pt-BR" | "en";
-    theme: "shadow" | "dusk" | "contrast";
+    theme: "shadow" | "dusk" | "contrast" | "dracula";
     compactMode: boolean;
   };
   claude: {
@@ -38,6 +38,8 @@ export interface Settings {
     showNames: boolean;
     animationsEnabled: boolean;
     showFinished: boolean;
+    roam: boolean;
+    freePosition: FreePosition | null;
   };
   metrics: {
     prices: ModelPrice[];
@@ -56,6 +58,12 @@ export interface Settings {
   instructions: {
     dir: string;
   };
+}
+
+export interface FreePosition {
+  monitor: string;
+  x: number;
+  bottom: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -91,6 +99,8 @@ export const DEFAULT_SETTINGS: Settings = {
     showNames: false,
     animationsEnabled: true,
     showFinished: true,
+    roam: true,
+    freePosition: null,
   },
   metrics: { prices: [], periodDays: 7, showTokens: true, showCosts: true },
   audio: { enabled: false, volume: 0.5 },

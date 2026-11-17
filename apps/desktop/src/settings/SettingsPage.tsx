@@ -59,7 +59,7 @@ function GeneralSection() {
         <input className="input mono" style={{ width: 240 }} defaultValue={g.toggleShortcut} maxLength={60} onBlur={(e) => e.target.value.trim() && set({ toggleShortcut: e.target.value.trim() })} />
       </label>
       <div className="row" style={{ marginTop: 10 }}>
-        <Select label="Tema" value={g.theme} onChange={(v) => set({ theme: v })} options={[{ value: "shadow", label: "Névoa espectral" }, { value: "dusk", label: "Crepúsculo" }, { value: "contrast", label: "Alto contraste" }]} />
+        <Select label="Tema" value={g.theme} onChange={(v) => set({ theme: v })} options={[{ value: "shadow", label: "Névoa espectral" }, { value: "dusk", label: "Crepúsculo" }, { value: "contrast", label: "Alto contraste" }, { value: "dracula", label: "Dracula" }]} />
         <Select label="Idioma" value={g.language} onChange={(v) => set({ language: v })} options={[{ value: "pt-BR", label: "Português (Brasil)" }, { value: "en", label: "English (parcial)" }]} />
       </div>
       <Toggle label="Modo compacto" checked={g.compactMode} onChange={(v) => set({ compactMode: v })} />
@@ -79,6 +79,18 @@ function DesktopSection() {
       <section className="card px-frame">
         <h3>Tripulação na área de trabalho</h3>
         <Toggle label="Mostrar personagens perto da barra de tarefas" checked={d.overlayEnabled} onChange={(v) => set({ overlayEnabled: v })} />
+        <Toggle
+          label="Andar livre pela tela"
+          hint="A tripulação atravessa o monitor numa janela do tamanho dela, conta o que está fazendo e pode ser arrastada com o mouse para qualquer lugar, inclusive para outro monitor."
+          checked={d.roam}
+          onChange={(v) => set({ roam: v })}
+        />
+        {d.roam && d.freePosition && (
+          <div className="row" style={{ margin: "4px 0 8px" }}>
+            <span className="dim">Solta em {d.freePosition.monitor}, no lugar onde você a deixou.</span>
+            <button className="btn small" onClick={() => set({ freePosition: null })}>Voltar à posição padrão</button>
+          </div>
+        )}
         <div className="row" style={{ margin: "8px 0" }}>
           <Select label="Posição" value={d.placement} onChange={(v) => set({ placement: v })} options={[{ value: "bottom", label: "Rodapé da tela (acima da barra, ou no lugar dela com a dock oculta)" }, { value: "taskbar", label: "Sobre a barra de tarefas (Windows, KDE, X11)" }, { value: "top", label: "Em cima" }]} />
           <Select
@@ -92,12 +104,12 @@ function DesktopSection() {
             ]}
           />
         </div>
-        <Range label="Altura da faixa" value={d.height} min={32} max={320} step={4} format={(v) => `${v}px`} onChange={(v) => set({ height: v })} />
-        <Toggle label="Largura só das almas trabalhando" hint="A faixa cresce quando mais agentes trabalham e encolhe quando param." checked={d.autoWidth} onChange={(v) => set({ autoWidth: v })} />
+        {!d.roam && <Range label="Altura da faixa" value={d.height} min={32} max={320} step={4} format={(v) => `${v}px`} onChange={(v) => set({ height: v })} />}
+        {!d.roam && <Toggle label="Largura só das almas trabalhando" hint="A faixa cresce quando mais agentes trabalham e encolhe quando param." checked={d.autoWidth} onChange={(v) => set({ autoWidth: v })} />}
         <div className="row" style={{ margin: "8px 0" }}>
           <Select label="Lado da tela" value={d.align} onChange={(v) => set({ align: v })} options={[{ value: "left", label: "Esquerda" }, { value: "center", label: "Centro" }, { value: "right", label: "Direita" }]} />
         </div>
-        {!d.autoWidth && <Range label="Largura da faixa" value={d.widthFraction} min={0.2} max={1} step={0.05} format={(v) => `${Math.round(v * 100)}%`} onChange={(v) => set({ widthFraction: v })} />}
+        {!d.roam && !d.autoWidth && <Range label="Largura da faixa" value={d.widthFraction} min={0.2} max={1} step={0.05} format={(v) => `${Math.round(v * 100)}%`} onChange={(v) => set({ widthFraction: v })} />}
         <Range label="Tamanho dos personagens" value={d.characterScale} min={1} max={4} step={1} format={(v) => `${v}x`} onChange={(v) => set({ characterScale: v })} />
         <Range label="Velocidade de caminhada" value={d.walkSpeed} min={8} max={80} step={2} format={(v) => `${v}px/s`} onChange={(v) => set({ walkSpeed: v })} />
         <Range label="Velocidade das animações" value={d.animationSpeed} min={0.5} max={2} step={0.1} format={(v) => `${v.toFixed(1)}x`} onChange={(v) => set({ animationSpeed: v })} />

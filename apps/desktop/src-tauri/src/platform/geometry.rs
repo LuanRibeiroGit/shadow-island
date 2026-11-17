@@ -67,6 +67,48 @@ pub fn overlay_rect_fit(monitor: Rect, work_area: Option<Rect>, placement: Overl
     Rect { x, y, width, height }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Anchor {
+    pub x: i32,
+    pub bottom: i32,
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn roam_rect(monitor: Rect, work_area: Option<Rect>, placement: OverlayPlacement, align: OverlayAlign, width: u32, height: u32, anchor: Option<Anchor>) -> Rect {
+    let wa = work_area.filter(|w| w.width > 0 && w.height > 0).unwrap_or(monitor);
+    let width = width.min(wa.width).max(48.min(wa.width));
+    let height = height.min(monitor.height).max(32.min(monitor.height));
+    let default_x = match align {
+        OverlayAlign::Left => wa.x,
+        OverlayAlign::Center => wa.x + ((wa.width - width) / 2) as i32,
+        OverlayAlign::Right => wa.x + (wa.width - width) as i32,
+    };
+    let default_bottom = match placement {
+        OverlayPlacement::Bottom => wa.y + wa.height as i32,
+        OverlayPlacement::Top => wa.y + height as i32,
+        OverlayPlacement::Taskbar => monitor.y + monitor.height as i32,
+    };
+    let (x, bottom) = anchor.map(|a| (a.x, a.bottom)).unwrap_or((default_x, default_bottom));
+    let x = x.clamp(monitor.x, monitor.x + (monitor.width - width) as i32);
+    let bottom = bottom.clamp(monitor.y + height as i32, monitor.y + monitor.height as i32);
+    Rect { x, y: bottom - height as i32, width, height }
+}
+
+pub fn monitor_at(monitors: &[Rect], x: i32, y: i32) -> Option<usize> {
+    let contains = |m: &Rect| x >= m.x && y >= m.y && x < m.x + m.width as i32 && y < m.y + m.height as i32;
+    monitors.iter().position(contains).or_else(|| {
+        monitors
+            .iter()
+            .enumerate()
+            .min_by_key(|(_, m)| {
+                let cx = x.clamp(m.x, m.x + m.width as i32);
+                let cy = y.clamp(m.y, m.y + m.height as i32);
+                (cx - x).unsigned_abs() as u64 + (cy - y).unsigned_abs() as u64
+            })
+            .map(|(i, _)| i)
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -111,5 +153,32 @@ mod tests {
         let r = overlay_rect(m2, None, OverlayPlacement::Bottom, 5000, 1.0);
         assert_eq!(r.height, 1440);
         assert_eq!(r.x, 1920);
+    }
+
+    #[test]
+    fn roams_from_the_default_corner() {
+        let wa = Rect { x: 0, y: 0, width: 1920, height: 1040 };
+        let r = roam_rect(MON, Some(wa), OverlayPlacement::Bottom, OverlayAlign::Right, 300, 110, None);
+        assert_eq!(r, Rect { x: 1620, y: 930, width: 300, height: 110 });
+        let r = roam_rect(MON, Some(wa), OverlayPlacement::Taskbar, OverlayAlign::Left, 300, 110, None);
+        assert_eq!(r, Rect { x: 0, y: 970, width: 300, height: 110 });
+    }
+
+    #[test]
+    fn roams_from_where_it_was_dropped_but_stays_on_the_monitor() {
+        let m2 = Rect { x: 1920, y: 0, width: 2560, height: 1440 };
+        let r = roam_rect(m2, None, OverlayPlacement::Bottom, OverlayAlign::Right, 300, 110, Some(Anchor { x: 2400, bottom: 700 }));
+        assert_eq!(r, Rect { x: 2400, y: 590, width: 300, height: 110 });
+        let r = roam_rect(m2, None, OverlayPlacement::Bottom, OverlayAlign::Right, 300, 110, Some(Anchor { x: 9000, bottom: 20 }));
+        assert_eq!(r, Rect { x: 4180, y: 0, width: 300, height: 110 });
+    }
+
+    #[test]
+    fn finds_the_monitor_under_a_point() {
+        let monitors = [MON, Rect { x: 1920, y: 0, width: 2560, height: 1440 }];
+        assert_eq!(monitor_at(&monitors, 100, 100), Some(0));
+        assert_eq!(monitor_at(&monitors, 2000, 1200), Some(1));
+        assert_eq!(monitor_at(&monitors, 1000, 1300), Some(0));
+        assert_eq!(monitor_at(&[], 0, 0), None);
     }
 }
