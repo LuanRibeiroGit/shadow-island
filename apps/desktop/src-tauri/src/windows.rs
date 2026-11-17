@@ -6,9 +6,9 @@ use std::time::Duration;
 
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, LogicalPosition, LogicalSize, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent};
+use tauri::{AppHandle, LogicalPosition, LogicalSize, Manager, Monitor, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent};
 
-use crate::platform::{overlay_rect_fit, CloseBehavior, OverlayPlacement, Rect};
+use crate::platform::{monitor_at, overlay_rect_fit, roam_rect, Anchor, CloseBehavior, OverlayPlacement, Rect};
 use crate::state::AppState;
 
 pub const CASTLE: &str = "castle";
@@ -133,35 +133,101 @@ pub fn ensure_overlay(app: &AppHandle) -> tauri::Result<WebviewWindow> {
     Ok(w)
 }
 
+pub struct MonitorArea {
+    pub name: Option<String>,
+    pub scale: f64,
+    pub monitor: Rect,
+    pub work: Rect,
+}
+
+impl MonitorArea {
+    fn of(mon: &Monitor) -> Self {
+        let scale = mon.scale_factor();
+        let to_logical = |x: f64| (x / scale).round() as i32;
+        let wa = mon.work_area();
+        Self {
+            name: mon.name().cloned(),
+            scale,
+            monitor: Rect {
+                x: to_logical(mon.position().x as f64),
+                y: to_logical(mon.position().y as f64),
+                width: to_logical(mon.size().width as f64) as u32,
+                height: to_logical(mon.size().height as f64) as u32,
+            },
+            work: Rect {
+                x: to_logical(wa.position.x as f64),
+                y: to_logical(wa.position.y as f64),
+                width: to_logical(wa.size.width as f64) as u32,
+                height: to_logical(wa.size.height as f64) as u32,
+            },
+        }
+    }
+}
+
+fn chosen_monitor(w: &WebviewWindow, name: Option<&String>) -> Option<Monitor> {
+    let monitors = w.available_monitors().unwrap_or_default();
+    name.and_then(|name| monitors.iter().find(|m| m.name() == Some(name)).cloned())
+        .or_else(|| w.primary_monitor().ok().flatten())
+        .or_else(|| monitors.first().cloned())
+}
+
+pub fn window_rect(w: &WebviewWindow) -> Option<Rect> {
+    let pos = w.outer_position().ok()?;
+    let size = w.inner_size().ok()?;
+    let scale = w.scale_factor().ok()?;
+    let to_logical = |x: f64| (x / scale).round() as i32;
+    Some(Rect { x: to_logical(pos.x as f64), y: to_logical(pos.y as f64), width: to_logical(size.width as f64) as u32, height: to_logical(size.height as f64) as u32 })
+}
+
+pub fn overlay_monitor_area(w: &WebviewWindow) -> Option<MonitorArea> {
+    let monitors = w.available_monitors().unwrap_or_default();
+    let areas: Vec<MonitorArea> = monitors.iter().map(MonitorArea::of).collect();
+    let r = window_rect(w)?;
+    let rects: Vec<Rect> = areas.iter().map(|a| a.monitor).collect();
+    let i = monitor_at(&rects, r.x + r.width as i32 / 2, r.y + r.height as i32 / 2)?;
+    areas.into_iter().nth(i)
+}
+
 pub fn position_overlay(app: &AppHandle, w: &WebviewWindow) {
     let state = app.state::<AppState>();
     let s = state.backend_settings().desktop;
-    let monitors = w.available_monitors().unwrap_or_default();
-    let mon = s
-        .monitor
-        .as_ref()
-        .and_then(|name| monitors.iter().find(|m| m.name().map(|n| n == name).unwrap_or(false)).cloned())
-        .or_else(|| w.primary_monitor().ok().flatten())
-        .or_else(|| monitors.first().cloned());
-    let Some(mon) = mon else { return };
-    let scale = mon.scale_factor();
-    let to_logical = |x: f64| (x / scale).round() as i32;
-    let m = Rect {
-        x: to_logical(mon.position().x as f64),
-        y: to_logical(mon.position().y as f64),
-        width: to_logical(mon.size().width as f64) as u32,
-        height: to_logical(mon.size().height as f64) as u32,
-    };
-    let wa = mon.work_area();
-    let work = Rect {
-        x: to_logical(wa.position.x as f64),
-        y: to_logical(wa.position.y as f64),
-        width: to_logical(wa.size.width as f64) as u32,
-        height: to_logical(wa.size.height as f64) as u32,
-    };
+    let Some(mon) = chosen_monitor(w, s.monitor.as_ref()) else { return };
+    let area = MonitorArea::of(&mon);
+    if s.roam {
+        let anchor = s
+            .free_position
+            .as_ref()
+            .filter(|p| area.name.as_ref() == Some(&p.monitor))
+            .map(|p| Anchor { x: area.monitor.x + p.x, bottom: area.monitor.y + p.bottom });
+        place_roaming(app, w, &area, anchor);
+        return;
+    }
     let content = if s.auto_width { state.overlay_content_width.lock().ok().and_then(|g| *g) } else { None };
-    let r = overlay_rect_fit(m, Some(work), s.placement, s.height, s.width_fraction, content, s.align);
-    log::info!("overlay: monitor {:?} {m:?} work {work:?} align {:?} content {content:?} -> {r:?}", mon.name(), s.align);
+    let r = overlay_rect_fit(area.monitor, Some(area.work), s.placement, s.height, s.width_fraction, content, s.align);
+    log::info!("overlay: monitor {:?} {:?} work {:?} align {:?} content {content:?} -> {r:?}", area.name, area.monitor, area.work, s.align);
+    apply_overlay_rect(w, r, area.scale, matches!(s.placement, OverlayPlacement::Bottom | OverlayPlacement::Taskbar));
+}
+
+pub fn resize_roaming_overlay(app: &AppHandle, w: &WebviewWindow) {
+    let Some(area) = overlay_monitor_area(w) else { return };
+    let anchor = window_rect(w).map(|r| Anchor { x: r.x, bottom: r.y + r.height as i32 });
+    place_roaming(app, w, &area, anchor);
+}
+
+fn place_roaming(app: &AppHandle, w: &WebviewWindow, area: &MonitorArea, anchor: Option<Anchor>) {
+    let state = app.state::<AppState>();
+    let s = state.backend_settings().desktop;
+    let width = state.overlay_content_width.lock().ok().and_then(|g| *g).unwrap_or(ROAM_DEFAULT_WIDTH);
+    let height = state.overlay_content_height.lock().ok().and_then(|g| *g).unwrap_or(ROAM_DEFAULT_HEIGHT);
+    let r = roam_rect(area.monitor, Some(area.work), s.placement, s.align, width, height, anchor);
+    log::info!("overlay: roaming on {:?} {:?} anchor {anchor:?} -> {r:?}", area.name, area.monitor);
+    apply_overlay_rect(w, r, area.scale, true);
+}
+
+const ROAM_DEFAULT_WIDTH: u32 = 300;
+const ROAM_DEFAULT_HEIGHT: u32 = 110;
+
+fn apply_overlay_rect(w: &WebviewWindow, r: Rect, scale: f64, keep_bottom: bool) {
     let _ = w.set_size(LogicalSize::new(r.width as f64, r.height as f64));
     let _ = w.set_position(LogicalPosition::new(r.x as f64, r.y as f64));
 
@@ -169,13 +235,12 @@ pub fn position_overlay(app: &AppHandle, w: &WebviewWindow) {
     // keeps webviews at least ~200 px tall). Re-check the real size once it has
     // settled and keep the strip's edge glued to the work area.
     let w2 = w.clone();
-    let placement = s.placement;
     std::thread::spawn(move || {
         std::thread::sleep(Duration::from_millis(250));
         let Ok(size) = w2.inner_size() else { return };
         let actual = (size.height as f64 / scale).round() as i32;
         let mut y = r.y;
-        if actual > r.height as i32 && matches!(placement, OverlayPlacement::Bottom | OverlayPlacement::Taskbar) {
+        if actual > r.height as i32 && keep_bottom {
             y = r.y + r.height as i32 - actual;
             log::info!("overlay: window is {actual}px tall (asked {}), moving to y={y}", r.height);
         }

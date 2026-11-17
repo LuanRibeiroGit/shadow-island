@@ -12,6 +12,7 @@ export interface OverlayOptions extends ViewOptions {
   showNames: boolean;
   /** Strip sized to the souls: one slot each, side by side, small wander. */
   compact?: boolean;
+  roam?: boolean;
 }
 
 export interface ScreenPos {
@@ -42,6 +43,9 @@ export class OverlayScene {
   private custom: Record<string, CharacterCustomization> = {};
   private onPositions: (p: ScreenPos[]) => void = () => {};
   private onPick: (id: string) => void = () => {};
+  private onPress: (id: string, e: PointerEvent) => void = () => {};
+  private travel: 1 | -1 | null = null;
+  private count = 0;
   private lastEmit = 0;
   private drag: { id: string; dx: number } | null = null;
   private wakeTimer: number | null = null;
@@ -74,9 +78,18 @@ export class OverlayScene {
     this.app.ticker.add((t) => this.tick(t.deltaMS));
   }
 
-  setCallbacks(onPositions: (p: ScreenPos[]) => void, onPick: (id: string) => void) {
+  setCallbacks(onPositions: (p: ScreenPos[]) => void, onPick: (id: string) => void, onPress: (id: string, e: PointerEvent) => void) {
     this.onPositions = onPositions;
     this.onPick = onPick;
+    this.onPress = onPress;
+  }
+
+  setTravel(facing: 1 | -1 | null) {
+    this.travel = facing;
+  }
+
+  private slotOffset(spacing: number): number {
+    return this.opts.roam ? Math.max(0, Math.round((this.app.screen.width - this.count * spacing) / 2)) : 0;
   }
 
   setOptions(o: OverlayOptions, custom: Record<string, CharacterCustomization>) {
@@ -103,18 +116,26 @@ export class OverlayScene {
     }
     const width = this.app.screen.width;
     const spacing = this.opts.compact ? slotSpacing(this.opts.scale) : 90 * this.opts.scale;
+    this.count = agents.length;
+    const offset = this.slotOffset(spacing);
     agents.forEach((a, i) => {
       let v = this.views.get(a.id);
       if (!v) {
         v = new CharacterView(a);
-        v.on("pointertap", () => this.onPick(a.id));
+        v.on("pointertap", () => {
+          if (!this.opts.roam) this.onPick(a.id);
+        });
         v.on("pointerdown", (e) => {
+          if (this.opts.roam) {
+            this.onPress(a.id, e.nativeEvent as PointerEvent);
+            return;
+          }
           const w = this.walkers.get(a.id);
           if (w) this.drag = { id: a.id, dx: e.global.x - w.x };
         });
         this.world.addChild(v);
         this.views.set(a.id, v);
-        const home = this.opts.compact ? slotX(i, spacing) : homeX(a.id, i, width, spacing);
+        const home = this.opts.compact ? offset + slotX(i, spacing) : homeX(a.id, i, width, spacing);
         this.walkers.set(a.id, { x: home, targetX: home, facing: 1, home, pinned: false, nextWander: 0 });
         void spawnEffect(this.world, "mist", home, this.ground() - 10, 2);
       }
@@ -128,7 +149,7 @@ export class OverlayScene {
       if (this.opts.compact) {
         // Slots follow the order of the souls so the strip can shrink around them.
         const w = this.walkers.get(a.id)!;
-        w.home = slotX(i, spacing);
+        w.home = offset + slotX(i, spacing);
         if (Math.abs(w.targetX - w.home) > 12 * this.opts.scale) w.targetX = w.home;
       }
       void v.sync(a, this.custom, now, this.opts);
@@ -185,14 +206,14 @@ export class OverlayScene {
       const w = this.walkers.get(id);
       if (!w) continue;
       const vis = visualFor(v.agent, now);
-      if (vis.moving && !w.pinned && this.drag?.id !== id && now > w.nextWander && Math.abs(w.x - w.targetX) < 1) {
+      if (vis.moving && !this.opts.roam && !w.pinned && this.drag?.id !== id && now > w.nextWander && Math.abs(w.x - w.targetX) < 1) {
         w.targetX = wanderTarget(w.home, now / 1000 + w.home, (this.opts.compact ? 10 : 70) * this.opts.scale, width, this.opts.compact ? 12 : 30);
         w.nextWander = now + 1500 + ((w.home * 7) % 1500);
       }
       if (!vis.moving) w.targetX = w.x; // stop where you are
       const nw = stepWalker(w, dt, this.opts.walkSpeed);
       w.x = nw.x;
-      w.facing = nw.facing;
+      w.facing = this.travel ?? nw.facing;
       v.setFacing(w.facing);
       v.position.set(Math.round(w.x), ground);
     }

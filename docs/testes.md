@@ -3,6 +3,53 @@
 Cada rodada de testes concluída é registrada aqui, a mais recente primeiro: o que estava sendo testado, cada comando, o
 resultado e os números. Falhas são copiadas literalmente.
 
+## 2026-11-17 · Balão de fala mais baixo na tripulação livre
+
+O que mudou: o balão ficou logo acima da cabeça. A base dele fica 6×escala px abaixo do topo do quadro do sprite, e ele
+só aparece se houver 24px livres acima. O espaço reservado para o balão na janela caiu de 32 para 20px (`BUBBLE_ROOM` em
+`apps/desktop/src/overlay/roam.ts`). Só mudou TypeScript. Branch `feature/roaming-crew`.
+
+Rodado por: agente `tester`. Vitest e Playwright com Node v22.23.3.
+
+| Comando | Resultado | Números |
+| --- | --- | --- |
+| `pnpm typecheck` | passou | 5 projetos sem erros |
+| `pnpm test` (Vitest) | passou | 51 testes em 11 arquivos |
+| `pnpm test:e2e` (Playwright, backend de demonstração) | passou | 9 testes |
+
+Falhas: nenhuma.
+
+Não rodou: `cargo test`, porque nenhum código Rust mudou.
+
+Sem teste automático: a posição do balão na tela. Nenhum teste confere onde ele aparece, e a altura da janela só é
+coberta pelas expectativas de `roamSize` em `roam.test.ts`.
+
+## 2026-11-17 · Tripulação andando livre pela tela
+
+O que mudou: o overlay da área de trabalho agora é uma janela pequena, do tamanho dos personagens e do balão, e é a
+própria janela que atravessa o monitor (`apps/desktop/src/overlay/roam.ts`, `OverlayApp.tsx`, `scene.ts`). Os
+personagens dizem a atividade real (`workSpeech`). Dá para arrastá-los com o mouse, e o ponto onde foram soltos fica
+salvo junto com o monitor. No Rust entraram `roam_rect` e `monitor_at` em `platform/geometry.rs`, os campos `roam` e
+`free_position` em `settings.rs` e os comandos `overlay_area` e `move_overlay`. Na tela de configurações entrou a opção
+"Andar livre pela tela". Branch `feature/roaming-crew`.
+
+Rodado por: agente `tester`. Comandos Node com Node v22.23.3.
+
+| Comando | Resultado | Números |
+| --- | --- | --- |
+| `pnpm typecheck` | passou | 5 projetos sem erros |
+| `pnpm test` (Vitest) | passou | 51 testes em 11 arquivos (6 novos em `roam.test.ts`, 1 novo em `schema.test.ts`) |
+| `pnpm test:e2e` (Playwright, backend de demonstração) | passou | 9 testes |
+| `cargo test --workspace --locked` | passou | 59 testes (4 novos: 3 em `platform::geometry`, 1 em `settings`) |
+
+Falhas: nenhuma.
+
+Não rodou: `cargo clippy`, que o CI não usa, o build do frontend e o `tauri build`.
+
+Sem teste automático: o comportamento real da janela no desktop. Ficaram de fora a janela andando pelo monitor, o
+arraste com o mouse de verdade, a posição salva depois de reiniciar, vários monitores físicos, a transparência no
+Wayland, no X11 e no Windows, e a fala gerada por eventos reais do Claude Code.
+
 ## 2026-11-17 · Tema Dracula
 
 O que mudou: novo tema `dracula`, com a paleta do Dracula do VS Code. Ele entrou no tipo `theme`

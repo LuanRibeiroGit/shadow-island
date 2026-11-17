@@ -28,6 +28,7 @@ pub struct AppState {
     pub overlay_hitboxes: Mutex<Vec<Rect>>,
     /// Width the overlay content needs (souls working), reported by the overlay page.
     pub overlay_content_width: Mutex<Option<u32>>,
+    pub overlay_content_height: Mutex<Option<u32>>,
 }
 
 impl AppState {

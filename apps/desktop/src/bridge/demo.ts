@@ -149,6 +149,11 @@ export function createDemoBackend(): Backend {
     setOverlayVisible: async () => {},
     listMonitors: async () => [],
     setOverlayContentWidth: async () => {},
+    overlayArea: async () => {
+      const screen = { x: 0, y: 0, width: window.innerWidth, height: window.innerHeight };
+      return { name: null, window: screen, monitor: screen, work: screen };
+    },
+    moveOverlay: async () => {},
     setOverlayHitboxes: async () => {},
     quit: async () => {},
     onUpdates: async (cb) => {

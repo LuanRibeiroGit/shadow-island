@@ -69,11 +69,21 @@ pub struct Desktop {
     pub monitor: Option<String>,
     /// Linux/Wayland: run through XWayland so the overlay can be placed and kept on top.
     pub prefer_x11_on_wayland: bool,
+    pub roam: bool,
+    pub free_position: Option<FreePosition>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FreePosition {
+    pub monitor: String,
+    pub x: i32,
+    pub bottom: i32,
 }
 
 impl Default for Desktop {
     fn default() -> Self {
-        Self { overlay_enabled: true, placement: OverlayPlacement::Bottom, height: 52, width_fraction: 1.0, auto_width: true, align: OverlayAlign::Right, monitor: None, prefer_x11_on_wayland: true }
+        Self { overlay_enabled: true, placement: OverlayPlacement::Bottom, height: 52, width_fraction: 1.0, auto_width: true, align: OverlayAlign::Right, monitor: None, prefer_x11_on_wayland: true, roam: true, free_position: None }
     }
 }
 
@@ -116,5 +126,17 @@ mod tests {
         let s = parse(&json!({"desktop": {"height": "tall"}}));
         assert_eq!(s.desktop.height, 52);
         assert!(validate(&json!([1])).is_err());
+    }
+
+    #[test]
+    fn roaming_and_dropped_position() {
+        let s = parse(&json!({}));
+        assert!(s.desktop.roam);
+        assert_eq!(s.desktop.free_position, None);
+        let s = parse(&json!({"desktop": {"roam": false, "freePosition": {"monitor": "HDMI-1", "x": 40, "bottom": 900}}}));
+        assert!(!s.desktop.roam);
+        assert_eq!(s.desktop.free_position, Some(FreePosition { monitor: "HDMI-1".into(), x: 40, bottom: 900 }));
+        let s = parse(&json!({"desktop": {"freePosition": null}}));
+        assert_eq!(s.desktop.free_position, None);
     }
 }

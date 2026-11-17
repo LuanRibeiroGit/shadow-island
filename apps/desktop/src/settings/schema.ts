@@ -38,6 +38,8 @@ export interface Settings {
     showNames: boolean;
     animationsEnabled: boolean;
     showFinished: boolean;
+    roam: boolean;
+    freePosition: FreePosition | null;
   };
   metrics: {
     prices: ModelPrice[];
@@ -53,6 +55,12 @@ export interface Settings {
     hiddenRooms: string[];
     roomNames: Record<string, string>;
   };
+}
+
+export interface FreePosition {
+  monitor: string;
+  x: number;
+  bottom: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -88,6 +96,8 @@ export const DEFAULT_SETTINGS: Settings = {
     showNames: false,
     animationsEnabled: true,
     showFinished: true,
+    roam: true,
+    freePosition: null,
   },
   metrics: { prices: [], periodDays: 7, showTokens: true, showCosts: true },
   audio: { enabled: false, volume: 0.5 },
