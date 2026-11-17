@@ -159,13 +159,17 @@ export function GrimoirePage() {
         </aside>
         {entry && (
           <section className="card grimoire-editor">
-            <div className="row" style={{ justifyContent: "space-between" }}>
-              <div>
-                <h3 style={{ margin: 0 }}>{entry.name}</h3>
-                <div className="faint mono" style={{ fontSize: 12 }}>{entry.file}</div>
-                <div className="faint mono" style={{ fontSize: 12 }}>{entry.target ? `→ ${entry.target}` : "Este projeto ainda não rodou o Claude Code nesta máquina."}</div>
+            <div className="grimoire-head">
+              <div className="grimoire-meta">
+                <h3>{entry.name}</h3>
+                <div className="grimoire-path" title={entry.file}><span className="dim">Arquivo</span> {entry.file}</div>
+                {entry.target ? (
+                  <div className="grimoire-path" title={entry.target}><span className="dim">Lido em</span> {entry.target}</div>
+                ) : (
+                  <div className="grimoire-path">Este projeto ainda não rodou o Claude Code nesta máquina.</div>
+                )}
               </div>
-              <div className="row">
+              <div className="grimoire-actions">
                 <StatusTag entry={entry} />
                 {entry.target && !entry.linked && (
                   <button className="btn" disabled={busy || dirty} title={dirty ? "Salve antes de vincular" : undefined} onClick={() => void link([entry])}>Vincular</button>

@@ -309,8 +309,15 @@ input[type="checkbox"] { accent-color: var(--accent-dim); }
 .grimoire-item:hover { background: #ffffff08; }
 .grimoire-item[aria-current="true"] { background: #ffffff10; color: var(--text); }
 .grimoire-item.global { border-bottom: 2px solid var(--line); margin-bottom: 4px; }
-.grimoire-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.grimoire-editor { display: grid; gap: 10px; }
+.grimoire-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.grimoire-item .tag { flex: none; white-space: nowrap; }
+.grimoire-editor { display: grid; gap: 12px; min-width: 0; }
+.grimoire-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.grimoire-meta { flex: 1; min-width: 0; display: grid; gap: 3px; }
+.grimoire-meta h3 { margin: 0 0 4px; }
+.grimoire-path { font-family: var(--mono); font-size: 12px; color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.grimoire-path .dim { font-family: inherit; margin-right: 6px; }
+.grimoire-actions { flex: none; display: flex; align-items: center; gap: 8px; }
 .grimoire-text { width: 100%; min-height: 60vh; resize: vertical; font-size: 13px; line-height: 1.5; tab-size: 2; }
 @media (max-width: 760px) { .grimoire-body { grid-template-columns: 1fr; } }
 

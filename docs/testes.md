@@ -3,6 +3,47 @@
 Cada rodada de testes concluída é registrada aqui, a mais recente primeiro: o que estava sendo testado, cada comando, o
 resultado e os números. Falhas são copiadas literalmente.
 
+## 2026-11-17 · Grimório: cabeçalho do editor em duas colunas
+
+O que mudou: no cabeçalho do editor, o título e os caminhos ficam à esquerda, cortados com reticências (o caminho
+completo aparece ao passar o mouse), e a etiqueta e os botões ficam fixos à direita (`GrimoirePage.tsx`, `theme.css`).
+
+Rodado por: agente `tester`. Comandos pnpm com Node v22.23.3.
+
+| Comando | Resultado | Números |
+| --- | --- | --- |
+| `pnpm typecheck` | passou | 5 pacotes sem erros |
+| `pnpm test` (Vitest) | passou | 62 testes em 13 arquivos |
+| `pnpm test:e2e` (Playwright, backend de demonstração) | passou | 10 testes |
+
+Falhas: nenhuma.
+
+Conferido à mão: um print do Grimório no modo demonstração, em 1100x700, mostrou o cabeçalho numa linha só, sem
+sobreposição.
+
+Não rodou: `cargo test`, porque nenhum código Rust mudou desde a rodada anterior.
+
+## 2026-11-17 · Grimório: um item por repositório e etiquetas alinhadas
+
+O que mudou: as pastas onde o Claude Code rodou agora sobem até a raiz do repositório git (`repo_root` e
+`repo_projects` em `crates/ids-core/src/instructions.rs`). Subpastas como `castle` e `src` viram o repositório delas, e
+pastas fora de qualquer repositório saem da lista. As etiquetas de status da lista não quebram mais linha (`theme.css`).
+
+Rodado por: agente `tester`. Comandos pnpm com Node v22.23.3.
+
+| Comando | Resultado | Números |
+| --- | --- | --- |
+| `cargo test -p ids-core instructions` | passou | 11 testes, incluindo o novo `subfolders_collapse_into_their_repository` |
+| `cargo test -p ilha-das-sombras` | passou | 18 testes |
+| `pnpm typecheck` | passou | 5 pacotes sem erros |
+| `pnpm test:e2e` (Playwright, backend de demonstração) | passou | 10 testes |
+
+Falhas: nenhuma.
+
+Não rodou: `pnpm test` (Vitest), porque nenhum código TypeScript coberto por ele mudou.
+
+Não coberto por teste automático: o alinhamento visual das etiquetas.
+
 ## 2026-11-17 · Main reunida: roaming, Dracula, Grimório e trabalho em andamento
 
 O que mudou: a `feature/roaming-battles` (tripulação livre e tema Dracula) entrou na `main` por merge, junto com o

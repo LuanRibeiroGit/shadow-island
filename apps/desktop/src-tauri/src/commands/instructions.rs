@@ -31,7 +31,7 @@ fn global_target() -> Option<PathBuf> {
 
 fn known_projects(state: &State<'_, AppState>) -> CmdResult<Vec<KnownProject>> {
     let rows = q::projects(&*conn(state)?).map_err(err)?;
-    Ok(rows.into_iter().map(|p| KnownProject { name: p.name, path: PathBuf::from(p.path) }).collect())
+    Ok(ins::repo_projects(rows.into_iter().map(|p| KnownProject { name: p.name, path: PathBuf::from(p.path) }).collect()))
 }
 
 fn parse_key(key: &str) -> CmdResult<InstructionKey> {

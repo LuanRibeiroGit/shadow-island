@@ -229,6 +229,23 @@ pub struct KnownProject {
     pub path: PathBuf,
 }
 
+pub fn repo_root(path: &Path) -> Option<PathBuf> {
+    path.ancestors().find(|dir| dir.join(".git").exists()).map(Path::to_path_buf)
+}
+
+pub fn repo_projects(known: Vec<KnownProject>) -> Vec<KnownProject> {
+    let mut out: Vec<KnownProject> = Vec::new();
+    for p in known {
+        let Some(root) = repo_root(&p.path) else { continue };
+        if out.iter().any(|o| o.path == root) {
+            continue;
+        }
+        let name = root.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or(p.name);
+        out.push(KnownProject { name, path: root });
+    }
+    out
+}
+
 fn entry(root: &Path, key: &InstructionKey, name: String, project_path: Option<&Path>, target: Option<PathBuf>, home: Option<&Path>) -> InstructionEntry {
     let source = key.source(root);
     let meta = fs::metadata(&source).ok();
@@ -374,6 +391,26 @@ mod tests {
         assert!(exclude_from_git(dir.path(), PROJECT_TARGET_FILE).unwrap());
         assert!(!exclude_from_git(dir.path(), PROJECT_TARGET_FILE).unwrap());
         assert_eq!(fs::read_to_string(dir.path().join(".git/info/exclude")).unwrap(), "# git ls-files\n*.tmp\nCLAUDE.local.md\n");
+    }
+
+    #[test]
+    fn subfolders_collapse_into_their_repository() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo = dir.path().join("ilha-das-sombras");
+        fs::create_dir_all(repo.join(".git")).unwrap();
+        fs::create_dir_all(repo.join("apps/desktop/src/castle")).unwrap();
+        let worktree = dir.path().join("other");
+        fs::create_dir_all(&worktree).unwrap();
+        fs::write(worktree.join(".git"), "gitdir: /x").unwrap();
+        let known = vec![
+            KnownProject { name: "castle".into(), path: repo.join("apps/desktop/src/castle") },
+            KnownProject { name: "ilha-das-sombras".into(), path: repo.clone() },
+            KnownProject { name: "Projects".into(), path: dir.path().to_path_buf() },
+            KnownProject { name: "other".into(), path: worktree.clone() },
+        ];
+        let out = repo_projects(known);
+        let found: Vec<(&str, &Path)> = out.iter().map(|p| (p.name.as_str(), p.path.as_path())).collect();
+        assert_eq!(found, [("ilha-das-sombras", repo.as_path()), ("other", worktree.as_path())]);
     }
 
     #[test]
