@@ -5,6 +5,7 @@ export const ptBR = {
   "nav.missions": "Missões",
   "nav.history": "Crônicas",
   "nav.characters": "Tripulação",
+  "nav.grimoire": "Grimório",
   "nav.settings": "Configurações",
   "common.unavailable": "Indisponível",
   "common.details": "Ver detalhes",

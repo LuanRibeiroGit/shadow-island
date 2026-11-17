@@ -4,6 +4,8 @@ import type {
   EventRecord,
   Filter,
   IntegrationInfo,
+  InstructionsOverview,
+  LinkOutcome,
   Mission,
   Project,
   Rect,
@@ -50,6 +52,11 @@ export interface Backend {
   integrationInfo(): Promise<IntegrationInfo>;
   integrationPlan(action: "install" | "remove"): Promise<SettingsPlan>;
   integrationApply(action: "install" | "remove", expectedAfter: string): Promise<string | null>;
+
+  instructionsOverview(): Promise<InstructionsOverview | null>;
+  readInstructions(key: string): Promise<string>;
+  saveInstructions(key: string, content: string): Promise<void>;
+  linkInstructions(key: string): Promise<LinkOutcome>;
 
   showCastle(route?: string): Promise<void>;
   setOverlayVisible(visible: boolean): Promise<void>;

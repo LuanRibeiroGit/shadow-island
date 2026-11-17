@@ -53,6 +53,9 @@ export interface Settings {
     hiddenRooms: string[];
     roomNames: Record<string, string>;
   };
+  instructions: {
+    dir: string;
+  };
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -92,6 +95,7 @@ export const DEFAULT_SETTINGS: Settings = {
   metrics: { prices: [], periodDays: 7, showTokens: true, showCosts: true },
   audio: { enabled: false, volume: 0.5 },
   castle: { hiddenRooms: [], roomNames: {} },
+  instructions: { dir: "" },
 };
 
 type Obj = Record<string, unknown>;

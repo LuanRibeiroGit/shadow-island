@@ -7,6 +7,7 @@ export const en: Partial<Dict> = {
   "nav.missions": "Missions",
   "nav.history": "Chronicles",
   "nav.characters": "Crew",
+  "nav.grimoire": "Grimoire",
   "nav.settings": "Settings",
   "common.unavailable": "Unavailable",
   "common.details": "View details",

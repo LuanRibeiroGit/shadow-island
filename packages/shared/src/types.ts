@@ -362,3 +362,28 @@ export interface Rect {
   width: number;
   height: number;
 }
+
+export interface InstructionEntry {
+  key: string;
+  name: string;
+  file: string;
+  exists: boolean;
+  bytes: number;
+  projectPath: string | null;
+  target: string | null;
+  linked: boolean;
+}
+
+export interface InstructionsOverview {
+  root: string;
+  global: InstructionEntry;
+  projects: InstructionEntry[];
+}
+
+export interface LinkOutcome {
+  target: string;
+  changed: boolean;
+  adopted: boolean;
+  keptLocal: boolean;
+  backup: string | null;
+}

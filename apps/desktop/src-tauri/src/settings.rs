@@ -17,6 +17,13 @@ pub struct BackendSettings {
     pub general: General,
     pub claude: Claude,
     pub desktop: Desktop,
+    pub instructions: Instructions,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Instructions {
+    pub dir: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -116,5 +123,11 @@ mod tests {
         let s = parse(&json!({"desktop": {"height": "tall"}}));
         assert_eq!(s.desktop.height, 52);
         assert!(validate(&json!([1])).is_err());
+    }
+
+    #[test]
+    fn instructions_dir_is_read() {
+        assert_eq!(parse(&json!({})).instructions.dir, "");
+        assert_eq!(parse(&json!({"instructions": {"dir": "/repo/instructions"}})).instructions.dir, "/repo/instructions");
     }
 }

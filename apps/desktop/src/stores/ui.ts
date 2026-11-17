@@ -7,6 +7,7 @@ export type Route =
   | { page: "missions" }
   | { page: "history"; sessionId?: string }
   | { page: "characters" }
+  | { page: "grimoire" }
   | { page: "settings"; section?: string }
   | { page: "agent"; agentId: string };
 
@@ -30,6 +31,7 @@ export function parseRoute(s: string): Route | null {
     case "dashboard":
     case "missions":
     case "characters":
+    case "grimoire":
       return { page };
     default:
       return null;

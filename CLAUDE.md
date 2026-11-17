@@ -8,6 +8,17 @@ Regras do dono do projeto para o Claude Code. Valem em toda sessão.
 - Toda vez que uma rodada de testes terminar, registre-a no topo de `docs/testes.md`: data, o que estava sendo testado,
   cada comando com o resultado e os números, as falhas copiadas literalmente, e o que não foi coberto.
 
+## Branches: direto na main
+
+Este repositório só tem a branch `main`. Aqui não vale o fluxo global de `develop`, `feature/*` e `test/*`: o trabalho
+é feito e commitado direto na `main`, e o push vai para a `origin/main` quando o dono do projeto pedir.
+
+## Instruções do Claude Code: Grimório
+
+As instruções globais e as de cada projeto ficam em `instructions/` (`global.md` e `projects/<projeto>.md`) e são
+editadas pela página Grimório do app. O botão Vincular faz o `~/.claude/CLAUDE.md` e o `CLAUDE.local.md` de cada
+projeto importarem esses arquivos com `@`. Edite as instruções em `instructions/`, não nos arquivos vinculados.
+
 ## Git e GitHub: sempre pelo agente de git
 
 - Tudo que envolve git ou GitHub (commit, push, pull, branches, pull requests, `gh`) é feito pelo subagente

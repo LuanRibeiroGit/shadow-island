@@ -2,6 +2,7 @@
 //! call `ids-core` or the PlatformAdapter, and map errors to strings.
 
 pub mod data;
+pub mod instructions;
 pub mod integration;
 pub mod system;
 pub mod window;

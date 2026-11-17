@@ -20,6 +20,7 @@ pub mod engine;
 pub mod error;
 pub mod event;
 pub mod hooks_install;
+pub mod instructions;
 pub mod missions;
 pub mod model;
 pub mod normalize;

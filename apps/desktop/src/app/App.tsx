@@ -16,6 +16,7 @@ const DashboardPage = lazy(() => import("../dashboard/DashboardPage").then((m) =
 const MissionsPage = lazy(() => import("../missions/MissionsPage").then((m) => ({ default: m.MissionsPage })));
 const HistoryPage = lazy(() => import("../history/HistoryPage").then((m) => ({ default: m.HistoryPage })));
 const CharactersPage = lazy(() => import("../characters/CharactersPage").then((m) => ({ default: m.CharactersPage })));
+const GrimoirePage = lazy(() => import("../grimoire/GrimoirePage").then((m) => ({ default: m.GrimoirePage })));
 const SettingsPage = lazy(() => import("../settings/SettingsPage").then((m) => ({ default: m.SettingsPage })));
 
 const NAV: { page: Route["page"]; icon: string; key: Parameters<ReturnType<typeof useT>>[0] }[] = [
@@ -25,6 +26,7 @@ const NAV: { page: Route["page"]; icon: string; key: Parameters<ReturnType<typeo
   { page: "missions", icon: "sword", key: "nav.missions" },
   { page: "history", icon: "scroll", key: "nav.history" },
   { page: "characters", icon: "ghost", key: "nav.characters" },
+  { page: "grimoire", icon: "book", key: "nav.grimoire" },
   { page: "settings", icon: "gear", key: "nav.settings" },
 ];
 
@@ -117,6 +119,8 @@ function Page({ route, integration, onIntegrationChange }: { route: Route; integ
       return <HistoryPage sessionId={route.sessionId} />;
     case "characters":
       return <CharactersPage />;
+    case "grimoire":
+      return <GrimoirePage />;
     case "settings":
       return <SettingsPage section={route.section} onIntegrationChange={onIntegrationChange} />;
   }

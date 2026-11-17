@@ -5,7 +5,7 @@
  * fixtures (see crates/ids-core/examples/export_demo.rs), so the UI can be
  * exercised in a plain browser without a Claude Code session.
  */
-import type { Dashboard, IntegrationInfo, SessionDetail, Snapshot, Specialty, SystemInfo, Update, AgentDetail } from "@ids/shared";
+import type { Dashboard, InstructionEntry, IntegrationInfo, SessionDetail, Snapshot, Specialty, SystemInfo, Update, AgentDetail } from "@ids/shared";
 import type { Backend } from "./backend";
 import data from "./demo-data.json";
 
@@ -94,6 +94,20 @@ export function createDemoBackend(): Backend {
     events: ["SessionStart", "SessionEnd", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure", "SubagentStart", "SubagentStop", "Stop", "StopFailure", "Notification", "TaskCreated", "TaskCompleted"],
   };
 
+  const instructionFiles = new Map<string, string>([["global", "# Regras globais\n\nSempre responder em português.\n"]]);
+  const linkedInstructions = new Set<string>();
+  const instructionEntry = (key: string, name: string, projectPath: string | null): InstructionEntry => ({
+    key,
+    name,
+    file: `(demo)/instructions/${key}.md`,
+    exists: instructionFiles.has(key),
+    bytes: new TextEncoder().encode(instructionFiles.get(key) ?? "").length,
+    projectPath,
+    target: key === "global" ? "~/.claude/CLAUDE.md" : projectPath && `${projectPath}/CLAUDE.local.md`,
+    linked: linkedInstructions.has(key),
+  });
+  const demoProjects = [{ name: "ilha-das-sombras", path: "/demo/ilha-das-sombras" }, { name: "loja-online", path: "/demo/loja-online" }];
+
   const removedAgents = new Set<string>();
   const specialties = new Map<string, Specialty>();
   const reject = (what: string) => Promise.reject(new Error(`${what} não está disponível no modo demonstração.`));
@@ -145,6 +159,21 @@ export function createDemoBackend(): Backend {
     integrationInfo: async () => integration,
     integrationPlan: () => reject("Instalar a integração"),
     integrationApply: () => reject("Instalar a integração"),
+    instructionsOverview: async () => ({
+      root: "(demo)/instructions",
+      global: instructionEntry("global", "Global", null),
+      projects: demoProjects.map((p) => instructionEntry(`projects/${p.name}`, p.name, p.path)),
+    }),
+    readInstructions: async (key) => instructionFiles.get(key) ?? "",
+    saveInstructions: async (key, content) => {
+      instructionFiles.set(key, content);
+    },
+    linkInstructions: async (key) => {
+      const changed = !linkedInstructions.has(key);
+      linkedInstructions.add(key);
+      if (!instructionFiles.has(key)) instructionFiles.set(key, "");
+      return { target: instructionEntry(key, key, null).target ?? key, changed, adopted: false, keptLocal: false, backup: null };
+    },
     showCastle: async () => {},
     setOverlayVisible: async () => {},
     listMonitors: async () => [],

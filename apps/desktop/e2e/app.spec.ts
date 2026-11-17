@@ -85,3 +85,26 @@ test("overlay page renders the crew strip", async ({ page }) => {
   await expect(page.locator(".overlay-root")).toHaveAttribute("data-crew", /\d+/);
   expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe("rgba(0, 0, 0, 0)");
 });
+
+test("grimoire edits, saves and links the global and project instructions", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: /Grimório/ }).first().click();
+  await expect(page.getByRole("heading", { name: "Grimório" })).toBeVisible();
+  const editor = page.getByLabel("Instruções de Global");
+  await expect(editor).toHaveValue(/Regras globais/);
+  const save = page.getByRole("button", { name: "Salvar" });
+  await expect(save).toBeDisabled();
+  await editor.fill("# Regras globais\n\nNunca escrever comentários.\n");
+  await save.click();
+  await expect(page.getByRole("status")).toContainText("Global salvo.");
+  await page.getByRole("button", { name: "Vincular", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("vinculado em ~/.claude/CLAUDE.md");
+
+  await page.locator(".grimoire-item", { hasText: "loja-online" }).click();
+  const project = page.getByLabel("Instruções de loja-online");
+  await expect(project).toHaveValue("");
+  await project.fill("# Loja\n");
+  await page.getByRole("button", { name: "Salvar" }).click();
+  await page.locator(".grimoire-item", { hasText: "Global" }).click();
+  await expect(page.getByLabel("Instruções de Global")).toHaveValue(/Nunca escrever comentários/);
+});

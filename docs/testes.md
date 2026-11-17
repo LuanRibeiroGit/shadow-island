@@ -3,6 +3,32 @@
 Cada rodada de testes concluída é registrada aqui, a mais recente primeiro: o que estava sendo testado, cada comando, o
 resultado e os números. Falhas são copiadas literalmente.
 
+## 2026-11-17 · Grimório: editor das instruções do Claude Code
+
+O que mudou: a página nova Grimório (`apps/desktop/src/grimoire/GrimoirePage.tsx`) edita `instructions/global.md` e
+`instructions/projects/<projeto>.md`. O botão Vincular faz `~/.claude/CLAUDE.md` e o `CLAUDE.local.md` de cada projeto
+importarem esses arquivos com `@`. A lógica fica em `crates/ids-core/src/instructions.rs`, os comandos Tauri em
+`apps/desktop/src-tauri/src/commands/instructions.rs` e a configuração nova é `instructions.dir`.
+
+Rodado por: agente `tester`.
+
+| Comando | Resultado | Números |
+| --- | --- | --- |
+| `pnpm typecheck` | passou | 5 pacotes sem erros |
+| `pnpm test` (Vitest) | passou com Node 22 | 44 testes em 10 arquivos |
+| `pnpm test:e2e` (Playwright, backend de demonstração) | passou com Node 22 | 10 testes, incluindo o novo do Grimório |
+| `cargo test -p ids-core instructions` | passou | 10 testes |
+| `cargo test -p ilha-das-sombras settings` | passou | 3 testes, incluindo o novo `instructions_dir_is_read` |
+
+Falhas: nenhuma. Com o Node padrão do shell (v18.20.8), o Vitest não inicia:
+`SyntaxError: The requested module 'node:util' does not provide an export named 'styleText'`. Por isso as etapas 2 e 3
+rodaram com o Node v22.23.3 do nvm.
+
+Não rodou: as suítes Rust inteiras, só os filtros `instructions` e `settings`.
+
+Não coberto por teste automático: os comandos Tauri reais (o e2e usa o backend de demonstração) e o vínculo de verdade em
+`~/.claude/CLAUDE.md` e nas pastas dos projetos. O app não foi aberto.
+
 ## 2026-11-16 · Combate da arena: mais dano, renascimento e golpe final
 
 O que mudou: a sombra da tarefa perde 6% de vida por golpe e 30% a cada ação nova do agente; quando a vida zera com a
