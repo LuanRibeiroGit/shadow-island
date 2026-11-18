@@ -1,11 +1,21 @@
 import { useCallback, useEffect, useState } from "react";
-import type { InstructionEntry, InstructionsOverview, LinkOutcome } from "@ids/shared";
+import type { InstructionCategory, InstructionEntry, InstructionsOverview, LinkOutcome } from "@ids/shared";
 import { backend } from "../bridge/backend";
 import { useSettings } from "../stores/settings";
 
 type Notice = { kind: "ok" | "err" | "info"; text: string };
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+const CATEGORY_NAMES: Record<InstructionCategory, string> = { pessoal: "Pessoal", trabalho: "Trabalho" };
+
+const isUnclassified = (entry: InstructionEntry) => entry.category === null && entry.slug !== null;
+const isCategory = (entry: InstructionEntry) => entry.category !== null && entry.slug === null;
+
+function classify(entry: InstructionEntry, category: InstructionCategory, root: string): InstructionEntry {
+  const key = `${category}/projects/${entry.slug}`;
+  return { ...entry, key, category, file: `${root}/${key}.md`, exists: false, bytes: 0, linked: false };
+}
 
 function linkNotice(name: string, out: LinkOutcome): Notice {
   if (!out.changed) return { kind: "info", text: `${name} já estava vinculado.` };
@@ -17,6 +27,7 @@ function linkNotice(name: string, out: LinkOutcome): Notice {
 }
 
 function StatusTag({ entry }: { entry: InstructionEntry }) {
+  if (isCategory(entry)) return <span className="tag info">Categoria</span>;
   if (entry.linked) return <span className="tag ok">Vinculado</span>;
   if (!entry.target) return <span className="tag warn">{entry.projectPath ? "Pasta ausente" : "Não visto nesta máquina"}</span>;
   return <span className="tag">Não vinculado</span>;
@@ -48,6 +59,7 @@ export function GrimoirePage() {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState<Notice | null>(null);
   const [busy, setBusy] = useState(false);
+  const [chosen, setChosen] = useState<Record<string, InstructionCategory>>({});
 
   const refresh = useCallback(async () => {
     try {
@@ -62,16 +74,21 @@ export function GrimoirePage() {
     void refresh();
   }, [refresh, dir]);
 
+  const projects = overview
+    ? overview.projects.map((p) => (isUnclassified(p) && p.slug && chosen[p.slug] ? classify(p, chosen[p.slug]!, overview.root) : p))
+    : [];
+  const entries = overview ? [overview.global, ...overview.categories, ...projects] : [];
+  const entry = entries.find((e) => e.key === selected) ?? overview?.global;
+  const choosing = entry !== undefined && isUnclassified(entry);
+
   useEffect(() => {
-    if (!overview || selected in saved) return;
+    if (!overview || choosing || selected in saved) return;
     void backend()
       .then((b) => b.readInstructions(selected))
       .then((text) => setSaved((s) => ({ ...s, [selected]: text })))
       .catch((e) => setNotice({ kind: "err", text: errorText(e) }));
-  }, [overview, selected, saved]);
+  }, [overview, choosing, selected, saved]);
 
-  const entries = overview ? [overview.global, ...overview.projects] : [];
-  const entry = entries.find((e) => e.key === selected) ?? overview?.global;
   const original = saved[selected];
   const text = drafts[selected] ?? original ?? "";
   const dirty = original !== undefined && drafts[selected] !== undefined && drafts[selected] !== original;
@@ -81,8 +98,10 @@ export function GrimoirePage() {
     if (!dirty) return;
     setBusy(true);
     try {
-      await (await backend()).saveInstructions(selected, text);
-      setSaved((s) => ({ ...s, [selected]: text }));
+      const b = await backend();
+      await b.saveInstructions(selected, text);
+      const stored = entry?.slug ? await b.readInstructions(selected) : text;
+      setSaved((s) => ({ ...s, [selected]: stored }));
       setDrafts((d) => {
         const next = { ...d };
         delete next[selected];
@@ -140,18 +159,36 @@ export function GrimoirePage() {
   }
 
   const linkable = entries.filter((e) => e.target && !e.linked && (e.key === "global" || e.exists));
+  const groups: { title: string; items: InstructionEntry[] }[] = [
+    { title: "Global", items: [overview.global] },
+    ...overview.categories.map((c) => ({ title: c.name, items: [c, ...projects.filter((p) => p.slug && p.category === c.category)] })),
+    { title: "Sem categoria", items: projects.filter(isUnclassified) },
+  ].filter((g) => g.items.length > 0);
+
+  const choose = (target: InstructionEntry, category: InstructionCategory) => {
+    if (!target.slug) return;
+    setChosen((c) => ({ ...c, [target.slug!]: category }));
+    setSelected(classify(target, category, overview.root).key);
+  };
+
+  const item = (e: InstructionEntry) => (
+    <button key={e.key} className={`grimoire-item${e.key === "global" ? " global" : ""}${e.slug ? " project" : ""}`} aria-current={e.key === selected ? "true" : undefined} onClick={() => setSelected(e.key)}>
+      <span className="grimoire-name">{e.name}{isDirty(e.key) ? " •" : ""}</span>
+      <StatusTag entry={e} />
+    </button>
+  );
 
   return (
     <div className="page grimoire">
       <h2>Grimório</h2>
-      <p className="sub">As instruções que o Claude Code lê: uma global e uma por projeto, guardadas em <span className="mono">{overview.root}</span>.</p>
+      <p className="sub">As instruções que o Claude Code lê: uma global, uma por categoria e uma por projeto, guardadas em <span className="mono">{overview.root}</span>.</p>
       <div className="grimoire-body">
         <aside className="card grimoire-list" aria-label="Instruções">
-          {entries.map((e) => (
-            <button key={e.key} className={`grimoire-item${e.key === "global" ? " global" : ""}`} aria-current={e.key === selected ? "true" : undefined} onClick={() => setSelected(e.key)}>
-              <span className="grimoire-name">{e.name}{isDirty(e.key) ? " •" : ""}</span>
-              <StatusTag entry={e} />
-            </button>
+          {groups.map((g) => (
+            <div key={g.title} className="grimoire-group" role="group" aria-label={g.title}>
+              {g.title !== "Global" && <div className="grimoire-group-title">{g.title}</div>}
+              {g.items.map(item)}
+            </div>
           ))}
           <button className="btn small" style={{ marginTop: 10 }} disabled={busy || linkable.length === 0} onClick={() => void link(linkable)}>
             Vincular tudo ({linkable.length})
@@ -162,8 +199,10 @@ export function GrimoirePage() {
             <div className="grimoire-head">
               <div className="grimoire-meta">
                 <h3>{entry.name}</h3>
-                <div className="grimoire-path" title={entry.file}><span className="dim">Arquivo</span> {entry.file}</div>
-                {entry.target ? (
+                {!choosing && <div className="grimoire-path" title={entry.file}><span className="dim">Arquivo</span> {entry.file}</div>}
+                {isCategory(entry) ? (
+                  <div className="grimoire-path">Importado no topo de cada projeto {entry.name.toLowerCase()}.</div>
+                ) : entry.target ? (
                   <div className="grimoire-path" title={entry.target}><span className="dim">Lido em</span> {entry.target}</div>
                 ) : (
                   <div className="grimoire-path">Este projeto ainda não rodou o Claude Code nesta máquina.</div>
@@ -171,21 +210,32 @@ export function GrimoirePage() {
               </div>
               <div className="grimoire-actions">
                 <StatusTag entry={entry} />
-                {entry.target && !entry.linked && (
+                {entry.target && !entry.linked && !choosing && (
                   <button className="btn" disabled={busy || dirty} title={dirty ? "Salve antes de vincular" : undefined} onClick={() => void link([entry])}>Vincular</button>
                 )}
-                <button className="btn primary" disabled={busy || !dirty} onClick={() => void save()}>Salvar</button>
+                {!choosing && <button className="btn primary" disabled={busy || !dirty} onClick={() => void save()}>Salvar</button>}
               </div>
             </div>
-            <textarea
-              className="input mono grimoire-text"
-              aria-label={`Instruções de ${entry.name}`}
-              spellCheck={false}
-              value={text}
-              disabled={original === undefined}
-              placeholder={entry.exists ? "" : "Arquivo ainda não existe. Escreva e salve para criá-lo."}
-              onChange={(e) => setDrafts((d) => ({ ...d, [selected]: e.target.value }))}
-            />
+            {choosing ? (
+              <div className="grimoire-choose">
+                <p className="dim">Este projeto ainda não tem arquivo de instruções. Escolha a categoria dele para começar a editar.</p>
+                <div className="row">
+                  {overview.categories.map((c) => c.category && (
+                    <button key={c.key} className="btn" onClick={() => choose(entry, c.category!)}>{CATEGORY_NAMES[c.category]}</button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <textarea
+                className="input mono grimoire-text"
+                aria-label={`Instruções de ${entry.name}`}
+                spellCheck={false}
+                value={text}
+                disabled={original === undefined}
+                placeholder={entry.exists ? "" : "Arquivo ainda não existe. Escreva e salve para criá-lo."}
+                onChange={(e) => setDrafts((d) => ({ ...d, [selected]: e.target.value }))}
+              />
+            )}
           </section>
         )}
       </div>

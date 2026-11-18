@@ -12,38 +12,76 @@ pub const PROJECT_TARGET_FILE: &str = "CLAUDE.local.md";
 pub const GLOBAL_TARGET_FILE: &str = "CLAUDE.md";
 pub const MAX_BYTES: usize = 1024 * 1024;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub enum InstructionCategory {
+    #[serde(rename = "pessoal")]
+    Personal,
+    #[serde(rename = "trabalho")]
+    Work,
+}
+
+impl InstructionCategory {
+    pub const ALL: [Self; 2] = [Self::Personal, Self::Work];
+
+    pub fn dir(self) -> &'static str {
+        match self {
+            Self::Personal => "pessoal",
+            Self::Work => "trabalho",
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Personal => "Pessoal",
+            Self::Work => "Trabalho",
+        }
+    }
+
+    pub fn from_dir(dir: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|c| c.dir() == dir)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InstructionKey {
     Global,
-    Project(String),
+    Category(InstructionCategory),
+    Project(InstructionCategory, String),
 }
 
 impl InstructionKey {
     pub fn parse(key: &str) -> CoreResult<Self> {
+        let invalid = || CoreError::Settings(format!("invalid instructions key: {key}"));
         if key == GLOBAL_KEY {
             return Ok(Self::Global);
         }
-        match key.strip_prefix("projects/") {
-            Some(name) if slug(name).as_deref() == Some(name) => Ok(Self::Project(name.to_string())),
-            _ => Err(CoreError::Settings(format!("invalid instructions key: {key}"))),
+        let parts: Vec<&str> = key.split('/').collect();
+        match parts.as_slice() {
+            [dir, file] if dir == file => InstructionCategory::from_dir(dir).map(Self::Category).ok_or_else(invalid),
+            [dir, PROJECTS_DIR, name] if slug(name).as_deref() == Some(*name) => {
+                InstructionCategory::from_dir(dir).map(|c| Self::Project(c, name.to_string())).ok_or_else(invalid)
+            }
+            _ => Err(invalid()),
         }
     }
 
-    pub fn for_project(name: &str) -> Option<Self> {
-        slug(name).map(Self::Project)
+    pub fn for_project(category: InstructionCategory, name: &str) -> Option<Self> {
+        slug(name).map(|s| Self::Project(category, s))
     }
 
     pub fn as_key(&self) -> String {
         match self {
             Self::Global => GLOBAL_KEY.to_string(),
-            Self::Project(name) => format!("{PROJECTS_DIR}/{name}"),
+            Self::Category(c) => format!("{0}/{0}", c.dir()),
+            Self::Project(c, name) => format!("{}/{PROJECTS_DIR}/{name}", c.dir()),
         }
     }
 
     pub fn source(&self, root: &Path) -> PathBuf {
         match self {
             Self::Global => root.join(format!("{GLOBAL_KEY}.md")),
-            Self::Project(name) => root.join(PROJECTS_DIR).join(format!("{name}.md")),
+            Self::Category(c) => root.join(c.dir()).join(format!("{}.md", c.dir())),
+            Self::Project(c, name) => root.join(c.dir()).join(PROJECTS_DIR).join(format!("{name}.md")),
         }
     }
 }
@@ -81,6 +119,14 @@ pub fn import_line(source: &Path, home: Option<&Path>) -> String {
     format!("@{}", shown.replace('\\', "/"))
 }
 
+fn import_path(line: &str, home: Option<&Path>) -> Option<PathBuf> {
+    let raw = line.trim().strip_prefix('@')?;
+    match raw.strip_prefix("~/") {
+        Some(rest) => home.map(|h| h.join(rest)),
+        None => Some(PathBuf::from(raw)),
+    }
+}
+
 fn read_optional(path: &Path) -> CoreResult<String> {
     match fs::read_to_string(path) {
         Ok(t) => Ok(t),
@@ -103,15 +149,59 @@ fn write_atomic(path: &Path, content: &str, now_ms: i64) -> CoreResult<()> {
     Ok(())
 }
 
+pub fn with_category_import(text: &str, root: &Path, category: InstructionCategory, home: Option<&Path>) -> String {
+    let own = import_line(&InstructionKey::Category(category).source(root), home);
+    let others: Vec<PathBuf> = InstructionCategory::ALL.into_iter().filter(|c| *c != category).map(|c| InstructionKey::Category(c).source(root)).collect();
+    let is_other = |l: &str| import_path(l, home).is_some_and(|p| others.contains(&p));
+    let mut has_own = text.lines().any(|l| l.trim() == own);
+    if has_own && !text.lines().any(is_other) {
+        return text.to_string();
+    }
+    let mut lines: Vec<String> = Vec::new();
+    for l in text.lines() {
+        if is_other(l) {
+            if !has_own {
+                lines.push(own.clone());
+                has_own = true;
+            }
+            continue;
+        }
+        lines.push(l.to_string());
+    }
+    if !has_own {
+        lines.insert(0, own);
+    }
+    let mut out = lines.join("\n");
+    if text.is_empty() || text.ends_with('\n') || lines.len() == 1 {
+        out.push('\n');
+    }
+    out
+}
+
+fn ensure_category_import(root: &Path, key: &InstructionKey, home: Option<&Path>, now_ms: i64) -> CoreResult<()> {
+    let InstructionKey::Project(category, _) = key else { return Ok(()) };
+    let source = key.source(root);
+    let current = read_optional(&source)?;
+    let next = with_category_import(&current, root, *category, home);
+    if next != current || !source.exists() {
+        write_atomic(&source, &next, now_ms)?;
+    }
+    Ok(())
+}
+
 pub fn read(root: &Path, key: &InstructionKey) -> CoreResult<String> {
     read_optional(&key.source(root))
 }
 
-pub fn save(root: &Path, key: &InstructionKey, content: &str, now_ms: i64) -> CoreResult<()> {
+pub fn save(root: &Path, key: &InstructionKey, content: &str, home: Option<&Path>, now_ms: i64) -> CoreResult<()> {
     if content.len() > MAX_BYTES {
         return Err(CoreError::Settings("instructions file too large".into()));
     }
-    write_atomic(&key.source(root), content, now_ms)
+    let content = match key {
+        InstructionKey::Project(category, _) => with_category_import(content, root, *category, home),
+        _ => content.to_string(),
+    };
+    write_atomic(&key.source(root), &content, now_ms)
 }
 
 pub fn is_linked(target: &Path, line: &str) -> bool {
@@ -134,17 +224,53 @@ fn backup_name(target: &Path, now_ms: i64) -> String {
     format!("{parent}-{file}.{now_ms}.bak")
 }
 
+fn without_stale_imports(text: &str, root: &Path, source: &Path, home: Option<&Path>) -> String {
+    let stale = |l: &str| import_path(l, home).is_some_and(|p| p != source && p.starts_with(root));
+    if !text.lines().any(stale) {
+        return text.to_string();
+    }
+    let kept: Vec<&str> = text.lines().filter(|l| !stale(l)).collect();
+    let joined = kept.join("\n");
+    let trimmed = joined.trim();
+    if trimmed.is_empty() {
+        String::new()
+    } else {
+        format!("{trimmed}\n")
+    }
+}
+
 pub fn link(source: &Path, target: &Path, home: Option<&Path>, backup_dir: &Path, now_ms: i64) -> CoreResult<LinkOutcome> {
+    link_cleaning(source, target, None, home, backup_dir, now_ms)
+}
+
+pub fn link_key(root: &Path, key: &InstructionKey, target: &Path, home: Option<&Path>, backup_dir: &Path, now_ms: i64) -> CoreResult<LinkOutcome> {
+    if let InstructionKey::Category(_) = key {
+        return Err(CoreError::Settings("category instructions cannot be linked".into()));
+    }
+    let stale_root = matches!(key, InstructionKey::Project(..)).then_some(root);
+    let outcome = link_cleaning(&key.source(root), target, stale_root, home, backup_dir, now_ms)?;
+    ensure_category_import(root, key, home, now_ms)?;
+    Ok(outcome)
+}
+
+fn link_cleaning(source: &Path, target: &Path, stale_root: Option<&Path>, home: Option<&Path>, backup_dir: &Path, now_ms: i64) -> CoreResult<LinkOutcome> {
     let line = import_line(source, home);
-    let current = read_optional(target)?;
+    let original = read_optional(target)?;
+    let current = match stale_root {
+        Some(root) => without_stale_imports(&original, root, source, home),
+        None => original.clone(),
+    };
     let mut outcome = LinkOutcome { target: target.to_string_lossy().to_string(), changed: false, adopted: false, kept_local: false, backup: None };
-    if current.lines().any(|l| l.trim() == line) {
+    let already = current.lines().any(|l| l.trim() == line);
+    if already && current == original {
         return Ok(outcome);
     }
 
     let local = current.trim();
     let source_text = read_optional(source)?;
-    let next = if local.is_empty() {
+    let next = if already {
+        current.clone()
+    } else if local.is_empty() {
         format!("{line}\n")
     } else if source_text.trim().is_empty() {
         write_atomic(source, &format!("{local}\n"), now_ms)?;
@@ -157,7 +283,7 @@ pub fn link(source: &Path, target: &Path, home: Option<&Path>, backup_dir: &Path
         format!("{}\n\n{line}\n", current.trim_end())
     };
 
-    if !current.is_empty() {
+    if !original.is_empty() {
         fs::create_dir_all(backup_dir)?;
         let backup = backup_dir.join(backup_name(target, now_ms));
         fs::copy(target, &backup)?;
@@ -187,20 +313,28 @@ pub fn exclude_from_git(project_dir: &Path, file_name: &str) -> CoreResult<bool>
     Ok(true)
 }
 
-pub fn project_files(root: &Path) -> CoreResult<Vec<String>> {
-    let dir = root.join(PROJECTS_DIR);
-    let entries = match fs::read_dir(&dir) {
-        Ok(e) => e,
-        Err(e) if e.kind() == ErrorKind::NotFound => return Ok(vec![]),
-        Err(e) => return Err(e.into()),
-    };
-    let mut names: Vec<String> = entries
-        .filter_map(Result::ok)
-        .filter_map(|e| e.file_name().to_str().and_then(|n| n.strip_suffix(".md")).map(str::to_string))
-        .filter(|n| slug(n).as_deref() == Some(n.as_str()))
-        .collect();
-    names.sort();
-    Ok(names)
+pub fn project_files(root: &Path) -> CoreResult<Vec<(InstructionCategory, String)>> {
+    let mut found = Vec::new();
+    for category in InstructionCategory::ALL {
+        let dir = root.join(category.dir()).join(PROJECTS_DIR);
+        let entries = match fs::read_dir(&dir) {
+            Ok(e) => e,
+            Err(e) if e.kind() == ErrorKind::NotFound => continue,
+            Err(e) => return Err(e.into()),
+        };
+        let mut names: Vec<String> = entries
+            .filter_map(Result::ok)
+            .filter_map(|e| e.file_name().to_str().and_then(|n| n.strip_suffix(".md")).map(str::to_string))
+            .filter(|n| slug(n).as_deref() == Some(n.as_str()))
+            .collect();
+        names.sort();
+        found.extend(names.into_iter().map(|n| (category, n)));
+    }
+    Ok(found)
+}
+
+pub fn project_category(root: &Path, name: &str) -> Option<InstructionCategory> {
+    InstructionCategory::ALL.into_iter().find(|c| InstructionKey::for_project(*c, name).is_some_and(|k| k.source(root).is_file()))
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -208,6 +342,8 @@ pub fn project_files(root: &Path) -> CoreResult<Vec<String>> {
 pub struct InstructionEntry {
     pub key: String,
     pub name: String,
+    pub slug: Option<String>,
+    pub category: Option<InstructionCategory>,
     pub file: String,
     pub exists: bool,
     pub bytes: u64,
@@ -221,6 +357,7 @@ pub struct InstructionEntry {
 pub struct InstructionsOverview {
     pub root: String,
     pub global: InstructionEntry,
+    pub categories: Vec<InstructionEntry>,
     pub projects: Vec<InstructionEntry>,
 }
 
@@ -250,9 +387,16 @@ fn entry(root: &Path, key: &InstructionKey, name: String, project_path: Option<&
     let source = key.source(root);
     let meta = fs::metadata(&source).ok();
     let line = import_line(&source, home);
+    let (slug, category) = match key {
+        InstructionKey::Global => (None, None),
+        InstructionKey::Category(c) => (None, Some(*c)),
+        InstructionKey::Project(c, s) => (Some(s.clone()), Some(*c)),
+    };
     InstructionEntry {
         key: key.as_key(),
         name,
+        slug,
+        category,
         file: source.to_string_lossy().to_string(),
         exists: meta.is_some(),
         bytes: meta.map(|m| m.len()).unwrap_or(0),
@@ -262,29 +406,51 @@ fn entry(root: &Path, key: &InstructionKey, name: String, project_path: Option<&
     }
 }
 
+fn unclassified_entry(slug: String, name: String, project_path: &Path, target: Option<PathBuf>) -> InstructionEntry {
+    InstructionEntry {
+        key: format!("{PROJECTS_DIR}/{slug}"),
+        name,
+        slug: Some(slug),
+        category: None,
+        file: String::new(),
+        exists: false,
+        bytes: 0,
+        project_path: Some(project_path.to_string_lossy().to_string()),
+        linked: false,
+        target: target.map(|t| t.to_string_lossy().to_string()),
+    }
+}
+
 pub fn overview(root: &Path, home: Option<&Path>, global_target: Option<PathBuf>, known: &[KnownProject]) -> CoreResult<InstructionsOverview> {
     let global = entry(root, &InstructionKey::Global, "Global".into(), None, global_target, home);
+    let categories = InstructionCategory::ALL.into_iter().map(|c| entry(root, &InstructionKey::Category(c), c.label().into(), None, None, home)).collect();
     let mut projects: Vec<InstructionEntry> = Vec::new();
     for p in known {
-        let Some(key) = InstructionKey::for_project(&p.name) else { continue };
-        if projects.iter().any(|e| e.key == key.as_key()) {
+        let Some(name_slug) = slug(&p.name) else { continue };
+        if projects.iter().any(|e| e.slug.as_deref() == Some(name_slug.as_str())) {
             continue;
         }
         let target = p.path.is_dir().then(|| project_target(&p.path));
-        projects.push(entry(root, &key, p.name.clone(), Some(&p.path), target, home));
+        match project_category(root, &name_slug) {
+            Some(c) => projects.push(entry(root, &InstructionKey::Project(c, name_slug), p.name.clone(), Some(&p.path), target, home)),
+            None => projects.push(unclassified_entry(name_slug, p.name.clone(), &p.path, target)),
+        }
     }
-    for name in project_files(root)? {
-        let key = InstructionKey::Project(name.clone());
+    for (category, name) in project_files(root)? {
+        let key = InstructionKey::Project(category, name.clone());
         if !projects.iter().any(|e| e.key == key.as_key()) {
             projects.push(entry(root, &key, name, None, None, home));
         }
     }
-    Ok(InstructionsOverview { root: root.to_string_lossy().to_string(), global, projects })
+    Ok(InstructionsOverview { root: root.to_string_lossy().to_string(), global, categories, projects })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const PERSONAL: InstructionCategory = InstructionCategory::Personal;
+    const WORK: InstructionCategory = InstructionCategory::Work;
 
     #[test]
     fn slugs_are_safe_file_names() {
@@ -296,12 +462,41 @@ mod tests {
     }
 
     #[test]
-    fn keys_reject_traversal() {
-        assert_eq!(InstructionKey::parse("global").unwrap(), InstructionKey::Global);
-        assert_eq!(InstructionKey::parse("projects/ilha-das-sombras").unwrap(), InstructionKey::Project("ilha-das-sombras".into()));
-        assert!(InstructionKey::parse("projects/../global").is_err());
-        assert!(InstructionKey::parse("projects/").is_err());
-        assert!(InstructionKey::parse("other").is_err());
+    fn keys_round_trip_through_the_folder_layout() {
+        let cases = [
+            ("global", InstructionKey::Global),
+            ("pessoal/pessoal", InstructionKey::Category(PERSONAL)),
+            ("trabalho/trabalho", InstructionKey::Category(WORK)),
+            ("pessoal/projects/ilha-das-sombras", InstructionKey::Project(PERSONAL, "ilha-das-sombras".into())),
+            ("trabalho/projects/bankeiro", InstructionKey::Project(WORK, "bankeiro".into())),
+        ];
+        let root = Path::new("/r");
+        for (text, key) in cases {
+            assert_eq!(InstructionKey::parse(text).unwrap(), key);
+            assert_eq!(key.as_key(), text);
+            assert_eq!(key.source(root), root.join(format!("{text}.md")));
+        }
+    }
+
+    #[test]
+    fn keys_reject_traversal_and_unknown_shapes() {
+        for bad in [
+            "projects/ilha-das-sombras",
+            "pessoal/projects/../global",
+            "pessoal/projects/..",
+            "pessoal/projects/",
+            "pessoal/projects/a/b",
+            "pessoal/projects/My App",
+            "pessoal/trabalho",
+            "outra/outra",
+            "outra/projects/app",
+            "../pessoal/pessoal",
+            "pessoal",
+            "other",
+            "",
+        ] {
+            assert!(InstructionKey::parse(bad).is_err(), "{bad} should be rejected");
+        }
     }
 
     #[test]
@@ -314,11 +509,46 @@ mod tests {
     #[test]
     fn save_and_read_round_trip() {
         let dir = tempfile::tempdir().unwrap();
-        let key = InstructionKey::Project("app".into());
+        let key = InstructionKey::Global;
         assert_eq!(read(dir.path(), &key).unwrap(), "");
-        save(dir.path(), &key, "# App\n", 1).unwrap();
-        assert_eq!(read(dir.path(), &key).unwrap(), "# App\n");
-        assert!(save(dir.path(), &key, &"x".repeat(MAX_BYTES + 1), 2).is_err());
+        save(dir.path(), &key, "# Global\n", None, 1).unwrap();
+        assert_eq!(read(dir.path(), &key).unwrap(), "# Global\n");
+        assert!(save(dir.path(), &key, &"x".repeat(MAX_BYTES + 1), None, 2).is_err());
+    }
+
+    #[test]
+    fn saving_a_project_puts_the_category_import_first() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path();
+        let root = home.join("repo/instructions");
+        let key = InstructionKey::Project(PERSONAL, "app".into());
+        save(&root, &key, "# App\n", Some(home), 1).unwrap();
+        assert_eq!(read(&root, &key).unwrap(), "@~/repo/instructions/pessoal/pessoal.md\n# App\n");
+        save(&root, &InstructionKey::Category(PERSONAL), "# Pessoal\n", Some(home), 2).unwrap();
+        assert_eq!(read(&root, &InstructionKey::Category(PERSONAL)).unwrap(), "# Pessoal\n");
+    }
+
+    #[test]
+    fn category_import_is_not_duplicated() {
+        let root = Path::new("/r/instructions");
+        let text = "# App\n\n@/r/instructions/trabalho/trabalho.md\nregras\n";
+        assert_eq!(with_category_import(text, root, WORK, None), text);
+        assert_eq!(with_category_import("", root, WORK, None), "@/r/instructions/trabalho/trabalho.md\n");
+        let once = with_category_import("x", root, WORK, None);
+        assert_eq!(once, "@/r/instructions/trabalho/trabalho.md\nx");
+        assert_eq!(with_category_import(&once, root, WORK, None), once);
+    }
+
+    #[test]
+    fn category_import_is_swapped_when_the_category_changes() {
+        let home = Path::new("/home/u");
+        let root = home.join("repo/instructions");
+        let text = "@~/repo/instructions/pessoal/pessoal.md\n# App\n";
+        assert_eq!(with_category_import(text, &root, WORK, Some(home)), "@~/repo/instructions/trabalho/trabalho.md\n# App\n");
+        let absolute = "# App\n@/home/u/repo/instructions/trabalho/trabalho.md\n";
+        assert_eq!(with_category_import(absolute, &root, PERSONAL, Some(home)), "# App\n@~/repo/instructions/pessoal/pessoal.md\n");
+        let both = "@~/repo/instructions/pessoal/pessoal.md\n@~/repo/instructions/trabalho/trabalho.md\n";
+        assert_eq!(with_category_import(both, &root, PERSONAL, Some(home)), "@~/repo/instructions/pessoal/pessoal.md\n");
     }
 
     #[test]
@@ -341,7 +571,7 @@ mod tests {
     #[test]
     fn link_keeps_local_content_that_differs() {
         let dir = tempfile::tempdir().unwrap();
-        let source = dir.path().join("instructions/projects/app.md");
+        let source = dir.path().join("instructions/pessoal/projects/app.md");
         let target = dir.path().join("app/CLAUDE.local.md");
         fs::create_dir_all(source.parent().unwrap()).unwrap();
         fs::create_dir_all(target.parent().unwrap()).unwrap();
@@ -383,6 +613,64 @@ mod tests {
     }
 
     #[test]
+    fn linking_a_project_creates_its_file_with_the_category_import() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path();
+        let root = home.join("repo/instructions");
+        let target = home.join("app/CLAUDE.local.md");
+        let key = InstructionKey::Project(WORK, "app".into());
+        let out = link_key(&root, &key, &target, Some(home), &home.join("b"), 1).unwrap();
+        assert!(out.changed);
+        assert_eq!(fs::read_to_string(&target).unwrap(), "@~/repo/instructions/trabalho/projects/app.md\n");
+        assert_eq!(read(&root, &key).unwrap(), "@~/repo/instructions/trabalho/trabalho.md\n");
+        let again = link_key(&root, &key, &target, Some(home), &home.join("b"), 2).unwrap();
+        assert!(!again.changed);
+        assert_eq!(read(&root, &key).unwrap(), "@~/repo/instructions/trabalho/trabalho.md\n");
+    }
+
+    #[test]
+    fn linking_a_project_adopts_local_content_below_the_category_import() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path();
+        let root = home.join("repo/instructions");
+        let target = home.join("app/CLAUDE.local.md");
+        fs::create_dir_all(target.parent().unwrap()).unwrap();
+        fs::write(&target, "notas do app\n").unwrap();
+        let key = InstructionKey::Project(PERSONAL, "app".into());
+        let out = link_key(&root, &key, &target, Some(home), &home.join("b"), 1).unwrap();
+        assert!(out.adopted && out.backup.is_some());
+        assert_eq!(read(&root, &key).unwrap(), "@~/repo/instructions/pessoal/pessoal.md\nnotas do app\n");
+    }
+
+    #[test]
+    fn linking_a_project_drops_stale_imports_from_the_root() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path();
+        let root = home.join("repo/instructions");
+        let target = home.join("app/CLAUDE.local.md");
+        fs::create_dir_all(target.parent().unwrap()).unwrap();
+        fs::write(&target, "@~/repo/instructions/projects/app.md\n").unwrap();
+        let key = InstructionKey::Project(PERSONAL, "app".into());
+        let out = link_key(&root, &key, &target, Some(home), &home.join("b"), 1).unwrap();
+        assert!(out.changed && !out.kept_local && out.backup.is_some());
+        assert_eq!(fs::read_to_string(&target).unwrap(), "@~/repo/instructions/pessoal/projects/app.md\n");
+
+        fs::write(&target, "notas\n@~/repo/instructions/pessoal/projects/app.md\n@~/repo/instructions/trabalho/projects/app.md\n@~/outro/regras.md\n").unwrap();
+        let moved = InstructionKey::Project(WORK, "app".into());
+        let out = link_key(&root, &moved, &target, Some(home), &home.join("b"), 2).unwrap();
+        assert!(out.changed);
+        assert_eq!(fs::read_to_string(&target).unwrap(), "notas\n@~/repo/instructions/trabalho/projects/app.md\n@~/outro/regras.md\n");
+    }
+
+    #[test]
+    fn categories_cannot_be_linked() {
+        let dir = tempfile::tempdir().unwrap();
+        let key = InstructionKey::Category(PERSONAL);
+        assert!(link_key(dir.path(), &key, &dir.path().join("CLAUDE.md"), None, &dir.path().join("b"), 1).is_err());
+        assert!(!dir.path().join("CLAUDE.md").exists());
+    }
+
+    #[test]
     fn git_exclude_is_appended_once() {
         let dir = tempfile::tempdir().unwrap();
         assert!(!exclude_from_git(dir.path(), PROJECT_TARGET_FILE).unwrap());
@@ -414,28 +702,58 @@ mod tests {
     }
 
     #[test]
-    fn overview_merges_known_projects_and_files() {
+    fn project_files_scan_both_categories() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        save(root, &InstructionKey::Project(WORK, "b".into()), "", None, 1).unwrap();
+        save(root, &InstructionKey::Project(PERSONAL, "z".into()), "", None, 1).unwrap();
+        save(root, &InstructionKey::Project(PERSONAL, "a".into()), "", None, 1).unwrap();
+        fs::write(root.join("pessoal/projects/Not A Slug.md"), "").unwrap();
+        assert_eq!(project_files(root).unwrap(), [(PERSONAL, "a".to_string()), (PERSONAL, "z".to_string()), (WORK, "b".to_string())]);
+    }
+
+    #[test]
+    fn overview_classifies_known_projects_and_lists_orphans() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path().join("instructions");
         let app_dir = dir.path().join("work/My App");
-        fs::create_dir_all(&app_dir).unwrap();
-        save(&root, &InstructionKey::Project("orphan".into()), "x", 1).unwrap();
-        save(&root, &InstructionKey::Project("my-app".into()), "y", 1).unwrap();
+        let site_dir = dir.path().join("home/site");
+        let new_dir = dir.path().join("home/novo");
+        for d in [&app_dir, &site_dir, &new_dir] {
+            fs::create_dir_all(d).unwrap();
+        }
+        save(&root, &InstructionKey::Project(WORK, "my-app".into()), "y", None, 1).unwrap();
+        save(&root, &InstructionKey::Project(PERSONAL, "site".into()), "s", None, 1).unwrap();
+        save(&root, &InstructionKey::Project(PERSONAL, "orphan".into()), "x", None, 1).unwrap();
+        save(&root, &InstructionKey::Category(WORK), "w", None, 1).unwrap();
         let known = [
             KnownProject { name: "My App".into(), path: app_dir.clone() },
             KnownProject { name: "my app".into(), path: dir.path().join("old/my app") },
+            KnownProject { name: "site".into(), path: site_dir.clone() },
+            KnownProject { name: "novo".into(), path: new_dir.clone() },
             KnownProject { name: "gone".into(), path: dir.path().join("missing") },
         ];
         let o = overview(&root, None, Some(dir.path().join(".claude/CLAUDE.md")), &known).unwrap();
         let keys: Vec<&str> = o.projects.iter().map(|e| e.key.as_str()).collect();
-        assert_eq!(keys, ["projects/my-app", "projects/gone", "projects/orphan"]);
+        assert_eq!(keys, ["trabalho/projects/my-app", "pessoal/projects/site", "projects/novo", "projects/gone", "pessoal/projects/orphan"]);
+        let categories: Vec<Option<InstructionCategory>> = o.projects.iter().map(|e| e.category).collect();
+        assert_eq!(categories, [Some(WORK), Some(PERSONAL), None, None, Some(PERSONAL)]);
         assert!(o.projects[0].exists && o.projects[0].target.is_some() && !o.projects[0].linked);
-        assert!(o.projects[1].target.is_none());
-        assert!(o.projects[2].project_path.is_none());
+        assert!(!o.projects[2].exists && o.projects[2].target.is_some() && o.projects[2].slug.as_deref() == Some("novo"));
+        assert!(o.projects[3].target.is_none());
+        assert!(o.projects[4].project_path.is_none());
         assert!(!o.global.exists && !o.global.linked);
+        let cats: Vec<(&str, &str, bool)> = o.categories.iter().map(|e| (e.key.as_str(), e.name.as_str(), e.exists)).collect();
+        assert_eq!(cats, [("pessoal/pessoal", "Pessoal", false), ("trabalho/trabalho", "Trabalho", true)]);
+        assert!(o.categories.iter().all(|e| e.target.is_none() && !e.linked));
 
-        let key = InstructionKey::Project("my-app".into());
-        link(&key.source(&root), &project_target(&app_dir), None, &dir.path().join("b"), 2).unwrap();
+        let json = serde_json::to_value(&o).unwrap();
+        assert_eq!(json["projects"][0]["category"], "trabalho");
+        assert_eq!(json["projects"][2]["category"], serde_json::Value::Null);
+        assert_eq!(json["categories"][0]["category"], "pessoal");
+
+        let key = InstructionKey::Project(WORK, "my-app".into());
+        link_key(&root, &key, &project_target(&app_dir), None, &dir.path().join("b"), 2).unwrap();
         let o = overview(&root, None, None, &known).unwrap();
         assert!(o.projects[0].linked);
     }

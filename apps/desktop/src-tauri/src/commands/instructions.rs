@@ -55,7 +55,8 @@ pub fn instructions_read(state: State<'_, AppState>, key: String) -> CmdResult<S
 #[tauri::command]
 pub fn instructions_save(state: State<'_, AppState>, key: String, content: String) -> CmdResult<()> {
     let root = root(&state).ok_or(NOT_CONFIGURED)?;
-    ins::save(&root, &parse_key(&key)?, &content, now_ms()).map_err(err)?;
+    let home = home_dir();
+    ins::save(&root, &parse_key(&key)?, &content, home.as_deref(), now_ms()).map_err(err)?;
     log::info!("instructions saved: {key}");
     Ok(())
 }
@@ -66,7 +67,8 @@ pub fn instructions_link(state: State<'_, AppState>, key: String) -> CmdResult<L
     let parsed = parse_key(&key)?;
     let project_dir = match &parsed {
         InstructionKey::Global => None,
-        InstructionKey::Project(name) => Some(
+        InstructionKey::Category(_) => return Err("As regras de categoria não são vinculadas: elas entram pelos arquivos dos projetos.".into()),
+        InstructionKey::Project(_, name) => Some(
             known_projects(&state)?
                 .into_iter()
                 .find(|p| ins::slug(&p.name).as_deref() == Some(name.as_str()) && p.path.is_dir())
@@ -79,7 +81,7 @@ pub fn instructions_link(state: State<'_, AppState>, key: String) -> CmdResult<L
         None => global_target().ok_or("pasta do usuário não encontrada")?,
     };
     let home = home_dir();
-    let outcome = ins::link(&parsed.source(&root), &target, home.as_deref(), &state.data_dir.join("backups"), now_ms()).map_err(err)?;
+    let outcome = ins::link_key(&root, &parsed, &target, home.as_deref(), &state.data_dir.join("backups"), now_ms()).map_err(err)?;
     if let Some(dir) = &project_dir {
         if let Err(e) = ins::exclude_from_git(dir, ins::PROJECT_TARGET_FILE) {
             log::warn!("could not add {} to git exclude: {e}", ins::PROJECT_TARGET_FILE);

@@ -363,9 +363,13 @@ export interface Rect {
   height: number;
 }
 
+export type InstructionCategory = "pessoal" | "trabalho";
+
 export interface InstructionEntry {
   key: string;
   name: string;
+  slug: string | null;
+  category: InstructionCategory | null;
   file: string;
   exists: boolean;
   bytes: number;
@@ -377,6 +381,7 @@ export interface InstructionEntry {
 export interface InstructionsOverview {
   root: string;
   global: InstructionEntry;
+  categories: InstructionEntry[];
   projects: InstructionEntry[];
 }
 
