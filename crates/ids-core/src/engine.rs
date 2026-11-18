@@ -93,6 +93,7 @@ pub struct Engine {
 }
 
 const FINISHED_TOOLS_CAP: usize = 512;
+const SILENT_SUBAGENT_MS: i64 = 30 * 60 * 1000;
 
 impl Engine {
     pub fn open(path: &Path, cfg: EngineConfig) -> CoreResult<Self> {
@@ -343,10 +344,11 @@ impl Engine {
                 for e in encounters::on_agent_end(&self.conn, &target, at)? {
                     out.push(Update::Encounter { encounter: e });
                 }
-                let state = if ev.has_background_work { AgentState::Waiting } else { AgentState::Success };
+                let state = if ev.has_background_work { AgentState::Idle } else { AgentState::Success };
                 let a = self.agents.get_mut(&target).expect("agent ensured");
                 a.current_tool = None;
                 agents::transition(&self.conn, a, state, None, at)?;
+                self.retire_silent_subagents(&ev.session_id, &target, at, out)?;
             }
             HookEventName::StopFailure => {
                 if let Some(m) = missions::current_prompt(&self.conn, &ev.session_id)? {
@@ -454,6 +456,25 @@ impl Engine {
                 }
             }
         }
+    }
+
+    fn retire_silent_subagents(&mut self, session_id: &str, main: &str, at: i64, out: &mut Vec<Update>) -> CoreResult<()> {
+        let silent: Vec<String> = self
+            .agents
+            .session_agents(session_id)
+            .into_iter()
+            .filter(|key| key != main)
+            .filter(|key| self.agents.get(key).is_some_and(|a| !a.is_main && a.ended_at.is_none() && at - a.updated_at >= SILENT_SUBAGENT_MS))
+            .collect();
+        for key in silent {
+            if let Some(agent_id) = self.agents.get(&key).and_then(|a| a.agent_id.clone()) {
+                if let Some(m) = missions::close(&self.conn, session_id, MissionKind::Subagent, &agent_id, MissionStatus::Error, at)? {
+                    out.push(Update::Mission { mission: m });
+                }
+            }
+            self.finish_agent(&key, at, None, out)?;
+        }
+        Ok(())
     }
 
     fn finish_agent(&mut self, key: &str, at: i64, final_state: Option<AgentState>, out: &mut Vec<Update>) -> CoreResult<()> {

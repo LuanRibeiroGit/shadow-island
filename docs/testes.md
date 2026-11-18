@@ -3,6 +3,36 @@
 Cada rodada de testes concluída é registrada aqui, a mais recente primeiro: o que estava sendo testado, cada comando, o
 resultado e os números. Falhas são copiadas literalmente.
 
+## 2026-11-18 · Motor: Stop com tarefa em segundo plano e subagentes silenciosos
+
+O que mudou: correção em `crates/ids-core/src/engine.rs` para personagens que ficavam presos no overlay do desktop.
+(1) Quando o agente principal recebe `Stop` e ainda há `background_tasks` (por exemplo um shell rodando), o estado passa
+a ser `IDLE` em vez de `WAITING`, que deixava o personagem dizendo "Estou esperando você...". (2) Em todo `Stop`, os
+subagentes da mesma sessão sem evento há 30 minutos ou mais (`SILENT_SUBAGENT_MS`) são encerrados com `finish_agent`, e a
+missão deles é fechada com erro (agentes interrompidos nunca mandam `SubagentStop`). Em
+`crates/ids-core/tests/engine_scenarios.rs`, `states_follow_real_events` passou a esperar `Idle` no Stop com shell em
+segundo plano, e entrou o teste novo `a_stop_retires_subagents_that_went_silent`.
+
+Rodado por: agente `tester`. Comandos pnpm com Node v22.23.3. O Playwright reaproveitou o Vite do app aberto em modo
+dev (porta 1420).
+
+| Comando | Resultado | Números |
+| --- | --- | --- |
+| `pnpm typecheck` | passou | 5 pacotes sem erros |
+| `pnpm test` (Vitest) | passou | 79 testes em 14 arquivos |
+| `pnpm test:rust` (`cargo test --workspace`) | passou | 89 testes (ids-core 48 + 12 de cenários, ids-hook 3, desktop 26), incluindo `states_follow_real_events` e `a_stop_retires_subagents_that_went_silent` |
+| `pnpm test:e2e` (Playwright, backend de demonstração) | passou | 10 de 10 passaram em 26.4s |
+
+Falhas: nenhuma.
+
+Avisos, que não são erros: Vitest, "ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1)"; Vite no e2e,
+"`__dirname` (vite.config.ts:10:51). Use `import.meta.dirname` instead".
+
+Sem cobertura automática: o efeito no app desktop real (o personagem saindo do overlay após o `Stop` com shell em
+segundo plano e após o encerramento de subagentes silenciosos). Os testes do motor cobrem a transição de estado e o
+encerramento, mas nenhum e2e exercita esses dois caminhos, e o limite de 30 minutos só é testado no motor, não com
+tempo real.
+
 ## 2026-11-18 · Overlay: nova rodada do e2e após corrigir o teste de CSP
 
 O que mudou desde a rodada anterior (logo abaixo): só `apps/desktop/e2e/csp.spec.ts`. O teste

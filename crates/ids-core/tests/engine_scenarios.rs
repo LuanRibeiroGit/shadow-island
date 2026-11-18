@@ -112,7 +112,7 @@ fn states_follow_real_events() {
         (s("Notification", json!({"notification_type":"permission_prompt","message":"m"})), AgentState::Waiting),
         (s("StopFailure", json!({"error":"rate_limit"})), AgentState::Error),
         (s("UserPromptSubmit", json!({"prompt":"y"})), AgentState::Running),
-        (s("Stop", json!({"background_tasks":[{"id":"b","type":"shell","status":"running"}]})), AgentState::Waiting),
+        (s("Stop", json!({"background_tasks":[{"id":"b","type":"shell","status":"running"}]})), AgentState::Idle),
         (s("UserPromptSubmit", json!({"prompt":"z"})), AgentState::Running),
         (s("Stop", json!({"background_tasks":[]})), AgentState::Success),
         (s("Notification", json!({"notification_type":"idle_prompt","message":"m"})), AgentState::Idle),
@@ -272,4 +272,26 @@ fn user_can_change_an_agents_function_and_remove_it() {
     assert_eq!(q::<i64>(&e, "SELECT COUNT(*) FROM agents"), 3);
     // What the agent did stays in the history.
     assert_eq!(q::<i64>(&e, "SELECT COUNT(*) FROM events"), events_before);
+}
+
+#[test]
+fn a_stop_retires_subagents_that_went_silent() {
+    let mut e = Engine::in_memory(EngineConfig::default()).unwrap();
+    let at = |id: &str, ms: i64, payload: Value| Envelope { v: 1, id: id.into(), fired_at_ms: ms, payload };
+    let minute = 60_000;
+    e.ingest(&at("p", 0, json!({"session_id":"s","hook_event_name":"UserPromptSubmit","prompt":"x"}))).unwrap();
+    for (id, agent) in [("killed", "a1"), ("busy", "a2")] {
+        e.ingest(&at(&format!("start-{id}"), 1_000, json!({"session_id":"s","hook_event_name":"SubagentStart","agent_id":agent,"agent_type":"tester"}))).unwrap();
+        e.ingest(&at(&format!("tool-{id}"), 2_000, json!({"session_id":"s","hook_event_name":"PreToolUse","agent_id":agent,"agent_type":"tester","tool_name":"Bash","tool_input":{"command":"pytest"},"tool_use_id":id}))).unwrap();
+    }
+    e.ingest(&at("busy-again", 25 * minute, json!({"session_id":"s","hook_event_name":"PreToolUse","agent_id":"a2","agent_type":"tester","tool_name":"Bash","tool_input":{"command":"pytest"},"tool_use_id":"busy-2"}))).unwrap();
+
+    e.ingest(&at("stop-early", 20 * minute, json!({"session_id":"s","hook_event_name":"Stop","background_tasks":[]}))).unwrap();
+    assert_eq!(e.active_agents().iter().filter(|a| !a.is_main).count(), 2);
+
+    e.ingest(&at("stop-late", 31 * minute, json!({"session_id":"s","hook_event_name":"Stop","background_tasks":[]}))).unwrap();
+    let open: Vec<String> = e.active_agents().iter().filter(|a| !a.is_main).filter_map(|a| a.agent_id.clone()).collect();
+    assert_eq!(open, vec!["a2".to_string()]);
+    let ended: Option<i64> = q(&e, "SELECT ended_at FROM agents WHERE id = 's#a1'");
+    assert_eq!(ended, Some(31 * minute));
 }
