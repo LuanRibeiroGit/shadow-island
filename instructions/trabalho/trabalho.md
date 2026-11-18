@@ -41,7 +41,13 @@ Saída final do build, em bloco de código.
 As duas PRs (develop e staging) levam a mesma descrição.
 
 ## ClickUp
-Quando o Luan pedir, usar o MCP do ClickUp (servidor `clickup`) para ler ou atualizar tasks. Não mexer no ClickUp sem pedido.
+Tudo que envolve o ClickUp passa pelo subagente `clickup-planner` (`~/.claude/agents/clickup-planner.md`): ler uma task pelo link, publicar o resumo, comentar ou atualizar campos. A sessão principal não chama o MCP do ClickUp por conta própria.
+
+Só mexer no ClickUp quando o Luan pedir. A exceção é o resumo da seção abaixo, que é publicado sem precisar pedir.
+
+Ao delegar, mandar no pedido tudo que o agente precisa, porque ele não vê a conversa: o link da task, o que fazer e, para publicar, o texto pronto do resumo. Mudança de status, responsáveis ou outros campos só quando o Luan pedir, e isso vai escrito no pedido ao agente.
+
+Se o `clickup-planner` não estiver disponível na sessão (agentes novos só carregam em sessões novas), usar o subagente genérico com as mesmas instruções e avisar o Luan.
 
 ## Resumo para a task do ClickUp
 Quando o Luan enviar o link de uma task do ClickUp, escrever um resumo do que foi feito para colocar na task:
@@ -76,4 +82,4 @@ DEV - Admin
 
 Só listar os projetos que tiveram PR. IBK é o `bankeiro-inovanti-ibk`, Back é o `bankeiro-inovanti-backend` e Admin é o `bankeiro-inovanti-admin`.
 
-Entregar o resumo pronto no chat. Só publicar na task pelo MCP do ClickUp se o Luan pedir.
+Depois que as PRs forem abertas, publicar o resumo na task sem esperar pedido, pelo `clickup-planner`, sempre como comentário da task e nunca na descrição. Mostrar no chat o texto publicado.
