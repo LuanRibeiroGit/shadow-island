@@ -15,16 +15,18 @@ Este repositório só tem a branch `main`. Aqui não vale o fluxo global de `dev
 
 ## Instruções do Claude Code: Grimório
 
-As instruções globais e as de cada projeto ficam em `instructions/` (`global.md` e `projects/<projeto>.md`) e são
-editadas pela página Grimório do app. O botão Vincular faz o `~/.claude/CLAUDE.md` e o `CLAUDE.local.md` de cada
-projeto importarem esses arquivos com `@`. Edite as instruções em `instructions/`, não nos arquivos vinculados.
+As instruções ficam em `instructions/`, separadas por categoria: `global.md`, `pessoal/pessoal.md`,
+`trabalho/trabalho.md` e `<categoria>/projects/<projeto>.md`, cuja primeira linha importa a categoria. Elas são
+editadas pela página Grimório do app. O botão Vincular faz o `~/.claude/CLAUDE.md` importar o `global.md` e o
+`CLAUDE.local.md` de cada projeto importar o arquivo do projeto, com `@`. Edite as instruções em `instructions/`, não
+nos arquivos vinculados.
 
 ## Git e GitHub: sempre pelo agente de git
 
 - Tudo que envolve git ou GitHub (commit, push, pull, branches, pull requests, `gh`) é feito pelo subagente
   `git-fixer` (`.claude/agents/git-fixer.md`). A sessão principal não roda esses comandos por conta própria.
 - Testes e git são sempre de agentes diferentes: nunca use o mesmo subagente para os dois.
-- Commit e push só quando o dono do projeto pedir. Ao pedir ao agente, informe a linha de coautoria do commit.
+- Commit e push só quando o dono do projeto pedir. Nunca inclua linha de coautoria ou qualquer menção ao Claude no commit ou na PR.
 
 ## Por que os agentes têm esses nomes
 
