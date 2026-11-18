@@ -18,9 +18,12 @@ test("production bundle runs under the app CSP", async ({ page }) => {
   await expect(page.locator(".castle-canvas-host canvas")).toBeVisible();
   await expect(page.locator(".castle-side").getByText("Guardiã da Lanterna").first()).toBeVisible({ timeout: 10_000 });
   await page.goto(`${BASE}/overlay.html`);
+  const root = page.locator(".overlay-root");
+  await expect(root).toHaveAttribute("data-roamers", /\S/, { timeout: 10_000 });
+  const agent = ((await root.getAttribute("data-roamers")) ?? "").split(" ")[0]!;
+  await page.goto(`${BASE}/overlay.html?agent=${encodeURIComponent(agent)}`);
   // Only working agents appear on the desktop, over a transparent background.
-  await expect(page.locator(".overlay-root")).not.toHaveAttribute("data-crew", "0", { timeout: 10_000 });
-  await expect(page.locator(".overlay-root")).toHaveAttribute("data-crew", /\d+/);
+  await expect(page.locator(".overlay-root")).toHaveAttribute("data-crew", "1", { timeout: 10_000 });
   expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe("rgba(0, 0, 0, 0)");
   expect(problems).toEqual([]);
 });

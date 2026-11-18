@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "overlay",
   "description": "Desktop overlay window: read-only data plus its own window controls",
-  "windows": ["overlay"],
+  "windows": ["overlay", "roamer-*"],
   "permissions": [
     "core:default"
   ]

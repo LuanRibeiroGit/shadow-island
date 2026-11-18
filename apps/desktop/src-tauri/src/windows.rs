@@ -1,6 +1,7 @@
 //! Window management: castle (main) window, desktop overlay, tray and shortcut.
 //! Platform decisions come from the PlatformAdapter.
 
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
@@ -8,7 +9,8 @@ use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, LogicalPosition, LogicalSize, Manager, Monitor, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent};
 
-use crate::platform::{monitor_at, overlay_rect_fit, roam_rect, Anchor, CloseBehavior, OverlayPlacement, Rect};
+use crate::platform::{overlay_rect_fit, roam_spawn, CloseBehavior, OverlayPlacement, Rect};
+use crate::roam::{agent_query, is_roamer};
 use crate::state::AppState;
 
 pub const CASTLE: &str = "castle";
@@ -114,8 +116,15 @@ pub fn ensure_overlay(app: &AppHandle) -> tauri::Result<WebviewWindow> {
     if let Some(w) = app.get_webview_window(OVERLAY) {
         return Ok(w);
     }
-    let w = WebviewWindowBuilder::new(app, OVERLAY, WebviewUrl::App("overlay.html".into()))
-        .title("Ilha das Sombras · tripulação")
+    let w = overlay_window(app, OVERLAY, "overlay.html".into(), "Ilha das Sombras · tripulação", 800.0, 52.0)?;
+    position_overlay(app, &w);
+    start_click_through_tracker(app.clone());
+    Ok(w)
+}
+
+fn overlay_window(app: &AppHandle, label: &str, url: String, title: &str, width: f64, height: f64) -> tauri::Result<WebviewWindow> {
+    WebviewWindowBuilder::new(app, label, WebviewUrl::App(url.into()))
+        .title(title)
         .transparent(true)
         .decorations(false)
         .always_on_top(true)
@@ -126,11 +135,8 @@ pub fn ensure_overlay(app: &AppHandle) -> tauri::Result<WebviewWindow> {
         .shadow(false)
         .focused(false)
         .visible(false)
-        .inner_size(800.0, 52.0)
-        .build()?;
-    position_overlay(app, &w);
-    start_click_through_tracker(app.clone());
-    Ok(w)
+        .inner_size(width, height)
+        .build()
 }
 
 pub struct MonitorArea {
@@ -179,53 +185,25 @@ pub fn window_rect(w: &WebviewWindow) -> Option<Rect> {
     Some(Rect { x: to_logical(pos.x as f64), y: to_logical(pos.y as f64), width: to_logical(size.width as f64) as u32, height: to_logical(size.height as f64) as u32 })
 }
 
-pub fn overlay_monitor_area(w: &WebviewWindow) -> Option<MonitorArea> {
-    let monitors = w.available_monitors().unwrap_or_default();
-    let areas: Vec<MonitorArea> = monitors.iter().map(MonitorArea::of).collect();
-    let r = window_rect(w)?;
-    let rects: Vec<Rect> = areas.iter().map(|a| a.monitor).collect();
-    let i = monitor_at(&rects, r.x + r.width as i32 / 2, r.y + r.height as i32 / 2)?;
-    areas.into_iter().nth(i)
+pub fn roam_area(app: &AppHandle) -> Option<MonitorArea> {
+    let w = app.get_webview_window(OVERLAY).or_else(|| app.get_webview_window(CASTLE))?;
+    let s = app.state::<AppState>().backend_settings().desktop;
+    chosen_monitor(&w, s.monitor.as_ref()).map(|m| MonitorArea::of(&m))
 }
 
 pub fn position_overlay(app: &AppHandle, w: &WebviewWindow) {
     let state = app.state::<AppState>();
     let s = state.backend_settings().desktop;
-    let Some(mon) = chosen_monitor(w, s.monitor.as_ref()) else { return };
-    let area = MonitorArea::of(&mon);
     if s.roam {
-        let anchor = s
-            .free_position
-            .as_ref()
-            .filter(|p| area.name.as_ref() == Some(&p.monitor))
-            .map(|p| Anchor { x: area.monitor.x + p.x, bottom: area.monitor.y + p.bottom });
-        place_roaming(app, w, &area, anchor);
         return;
     }
+    let Some(mon) = chosen_monitor(w, s.monitor.as_ref()) else { return };
+    let area = MonitorArea::of(&mon);
     let content = if s.auto_width { state.overlay_content_width.lock().ok().and_then(|g| *g) } else { None };
     let r = overlay_rect_fit(area.monitor, Some(area.work), s.placement, s.height, s.width_fraction, content, s.align);
     log::info!("overlay: monitor {:?} {:?} work {:?} align {:?} content {content:?} -> {r:?}", area.name, area.monitor, area.work, s.align);
     apply_overlay_rect(w, r, area.scale, matches!(s.placement, OverlayPlacement::Bottom | OverlayPlacement::Taskbar));
 }
-
-pub fn resize_roaming_overlay(app: &AppHandle, w: &WebviewWindow) {
-    let Some(area) = overlay_monitor_area(w) else { return };
-    let anchor = window_rect(w).map(|r| Anchor { x: r.x, bottom: r.y + r.height as i32 });
-    place_roaming(app, w, &area, anchor);
-}
-
-fn place_roaming(app: &AppHandle, w: &WebviewWindow, area: &MonitorArea, anchor: Option<Anchor>) {
-    let state = app.state::<AppState>();
-    let s = state.backend_settings().desktop;
-    let width = state.overlay_content_width.lock().ok().and_then(|g| *g).unwrap_or(ROAM_DEFAULT_WIDTH);
-    let height = state.overlay_content_height.lock().ok().and_then(|g| *g).unwrap_or(ROAM_DEFAULT_HEIGHT);
-    let r = roam_rect(area.monitor, Some(area.work), s.placement, s.align, width, height, anchor);
-    log::info!("overlay: roaming on {:?} {:?} anchor {anchor:?} -> {r:?}", area.name, area.monitor);
-    apply_overlay_rect(w, r, area.scale, true);
-}
-
-const ROAM_DEFAULT_WIDTH: u32 = 300;
-const ROAM_DEFAULT_HEIGHT: u32 = 110;
 
 fn apply_overlay_rect(w: &WebviewWindow, r: Rect, scale: f64, keep_bottom: bool) {
     let _ = w.set_size(LogicalSize::new(r.width as f64, r.height as f64));
@@ -250,22 +228,167 @@ fn apply_overlay_rect(w: &WebviewWindow, r: Rect, scale: f64, keep_bottom: bool)
     });
 }
 
+fn roam_bottom(app: &AppHandle, area: &MonitorArea) -> Option<i32> {
+    let s = app.state::<AppState>().backend_settings().desktop;
+    s.free_position.as_ref().filter(|p| area.name.as_ref() == Some(&p.monitor)).map(|p| area.monitor.y + p.bottom)
+}
+
+pub fn sync_roamers(app: &AppHandle, agents: Vec<String>, width: u32, height: u32) {
+    let state = app.state::<AppState>();
+    let s = state.backend_settings().desktop;
+    let agents = if s.roam && s.overlay_enabled { agents } else { Vec::new() };
+    let area = roam_area(app);
+    let bottom = area.as_ref().and_then(|a| roam_bottom(app, a));
+    let (plan, resized, shown) = {
+        let Ok(mut reg) = state.roamers.lock() else { return };
+        let plan = reg.plan(&agents);
+        let resized = reg.resize(width, height);
+        for r in &plan.added {
+            match &area {
+                Some(a) => {
+                    let taken: Vec<Rect> = reg.placed().into_iter().map(|(_, rect)| rect).collect();
+                    let rect = roam_spawn(a.monitor, Some(a.work), s.placement, width, height, bottom, &taken);
+                    reg.set_rect(&r.label, rect);
+                }
+                None => reg.forget(&r.label),
+            }
+        }
+        (plan, resized, reg.shown)
+    };
+    if let Ok(mut boxes) = state.overlay_hitboxes.lock() {
+        for label in &plan.removed {
+            boxes.remove(label);
+        }
+    }
+    for label in &plan.removed {
+        if let Some(w) = app.get_webview_window(label) {
+            let _ = w.destroy();
+        }
+    }
+    let Some(area) = area else { return };
+    for (label, rect) in resized {
+        if let Some(w) = app.get_webview_window(&label) {
+            apply_overlay_rect(&w, rect, area.scale, true);
+        }
+    }
+    for roamer in plan.added {
+        let Some(rect) = state.roamers.lock().ok().and_then(|reg| reg.rect(&roamer.label)) else { continue };
+        let url = format!("overlay.html?agent={}", agent_query(&roamer.agent));
+        let w = match overlay_window(app, &roamer.label, url, "Ilha das Sombras · tripulante", rect.width as f64, rect.height as f64) {
+            Ok(w) => w,
+            Err(e) => {
+                log::warn!("overlay: roamer for {} not created: {e}", roamer.agent);
+                if let Ok(mut reg) = state.roamers.lock() {
+                    reg.forget(&roamer.label);
+                }
+                continue;
+            }
+        };
+        if !state.roamers.lock().map(|reg| reg.contains(&roamer.label)).unwrap_or(false) {
+            let _ = w.destroy();
+            continue;
+        }
+        if shown {
+            let _ = w.show();
+            let _ = w.set_always_on_top(true);
+        }
+        log::info!("overlay: roamer {} for {} at {rect:?}", roamer.label, roamer.agent);
+        apply_overlay_rect(&w, rect, area.scale, true);
+    }
+}
+
+pub fn relayout_roamers(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    let s = state.backend_settings().desktop;
+    if !s.roam || !s.overlay_enabled {
+        return;
+    }
+    let Some(area) = roam_area(app) else { return };
+    let bottom = roam_bottom(app, &area);
+    let placed = {
+        let Ok(mut reg) = state.roamers.lock() else { return };
+        let Some((width, height)) = reg.size() else { return };
+        reg.relayout(|taken| roam_spawn(area.monitor, Some(area.work), s.placement, width, height, bottom, taken))
+    };
+    for (label, rect) in placed {
+        if let Some(w) = app.get_webview_window(&label) {
+            apply_overlay_rect(&w, rect, area.scale, true);
+        }
+    }
+}
+
+fn close_roamers(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    let removed = match state.roamers.lock() {
+        Ok(mut reg) => {
+            reg.shown = false;
+            reg.plan(&[]).removed
+        }
+        Err(_) => return,
+    };
+    for label in removed {
+        if let Some(w) = app.get_webview_window(&label) {
+            let _ = w.destroy();
+        }
+    }
+}
+
+fn show_roamers(app: &AppHandle, shown: bool) {
+    let state = app.state::<AppState>();
+    let placed = match state.roamers.lock() {
+        Ok(mut reg) => {
+            reg.shown = shown;
+            reg.placed()
+        }
+        Err(_) => return,
+    };
+    let scale = roam_area(app).map(|a| a.scale).unwrap_or(1.0);
+    for (label, rect) in placed {
+        let Some(w) = app.get_webview_window(&label) else { continue };
+        if shown {
+            let _ = w.show();
+            let _ = w.set_always_on_top(true);
+            apply_overlay_rect(&w, rect, scale, true);
+        } else {
+            let _ = w.hide();
+        }
+    }
+}
+
+pub fn roamers_shown(app: &AppHandle) -> bool {
+    app.state::<AppState>().roamers.lock().map(|reg| reg.shown).unwrap_or(false)
+}
+
 pub fn set_overlay_visible(app: &AppHandle, visible: bool) {
+    let roam = app.state::<AppState>().backend_settings().desktop.roam;
     if visible {
         if let Ok(w) = ensure_overlay(app) {
+            if roam {
+                let _ = w.hide();
+                show_roamers(app, true);
+                return;
+            }
+            close_roamers(app);
             let _ = w.show();
             let _ = w.set_always_on_top(true);
             // Position after showing: before it is mapped the window manager may
             // ignore the requested position and use its own placement.
             position_overlay(app, &w);
         }
-    } else if let Some(w) = app.get_webview_window(OVERLAY) {
-        let _ = w.hide();
+    } else {
+        show_roamers(app, false);
+        if let Some(w) = app.get_webview_window(OVERLAY) {
+            let _ = w.hide();
+        }
     }
 }
 
 pub fn toggle_overlay(app: &AppHandle) {
-    let visible = app.get_webview_window(OVERLAY).and_then(|w| w.is_visible().ok()).unwrap_or(false);
+    let visible = if app.state::<AppState>().backend_settings().desktop.roam {
+        roamers_shown(app)
+    } else {
+        app.get_webview_window(OVERLAY).and_then(|w| w.is_visible().ok()).unwrap_or(false)
+    };
     set_overlay_visible(app, !visible);
 }
 
@@ -280,28 +403,38 @@ fn start_click_through_tracker(app: AppHandle) {
     std::thread::Builder::new()
         .name("ids-overlay-hit".into())
         .spawn(move || {
-            let mut ignoring: Option<bool> = None;
+            let mut ignoring: HashMap<String, bool> = HashMap::new();
             loop {
                 std::thread::sleep(Duration::from_millis(80));
                 if QUITTING.load(Ordering::SeqCst) {
                     return;
                 }
-                let Some(w) = app.get_webview_window(OVERLAY) else { return };
-                if !w.is_visible().unwrap_or(false) {
+                let shown: Vec<WebviewWindow> = app
+                    .webview_windows()
+                    .into_iter()
+                    .filter(|(label, _)| label == OVERLAY || is_roamer(label))
+                    .map(|(_, w)| w)
+                    .filter(|w| w.is_visible().unwrap_or(false))
+                    .collect();
+                ignoring.retain(|label, _| shown.iter().any(|w| w.label() == label));
+                if shown.is_empty() {
                     std::thread::sleep(Duration::from_millis(400));
                     continue;
                 }
+                let Ok(cursor) = app.cursor_position() else { continue };
                 let boxes = app.state::<AppState>().overlay_hitboxes.lock().map(|b| b.clone()).unwrap_or_default();
-                let (Ok(cursor), Ok(pos), Ok(scale)) = (app.cursor_position(), w.outer_position(), w.scale_factor()) else { continue };
-                let lx = (cursor.x - pos.x as f64) / scale;
-                let ly = (cursor.y - pos.y as f64) / scale;
-                let inside = boxes.iter().any(|b| {
-                    lx >= b.x as f64 && ly >= b.y as f64 && lx <= (b.x + b.width as i32) as f64 && ly <= (b.y + b.height as i32) as f64
-                });
-                let ignore = !inside;
-                if ignoring != Some(ignore) {
-                    let _ = w.set_ignore_cursor_events(ignore);
-                    ignoring = Some(ignore);
+                for w in shown {
+                    let (Ok(pos), Ok(scale)) = (w.outer_position(), w.scale_factor()) else { continue };
+                    let lx = (cursor.x - pos.x as f64) / scale;
+                    let ly = (cursor.y - pos.y as f64) / scale;
+                    let inside = boxes.get(w.label()).is_some_and(|boxes| {
+                        boxes.iter().any(|b| lx >= b.x as f64 && ly >= b.y as f64 && lx <= (b.x + b.width as i32) as f64 && ly <= (b.y + b.height as i32) as f64)
+                    });
+                    let ignore = !inside;
+                    if ignoring.get(w.label()) != Some(&ignore) {
+                        let _ = w.set_ignore_cursor_events(ignore);
+                        ignoring.insert(w.label().to_string(), ignore);
+                    }
                 }
             }
         })

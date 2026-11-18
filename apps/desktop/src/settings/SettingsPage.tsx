@@ -81,7 +81,7 @@ function DesktopSection() {
         <Toggle label="Mostrar personagens perto da barra de tarefas" checked={d.overlayEnabled} onChange={(v) => set({ overlayEnabled: v })} />
         <Toggle
           label="Andar livre pela tela"
-          hint="A tripulação atravessa o monitor numa janela do tamanho dela, conta o que está fazendo e pode ser arrastada com o mouse para qualquer lugar, inclusive para outro monitor."
+          hint="A tripulação passeia por uma faixa baixa da largura do monitor, cada um para o seu lado, conta o que está fazendo e enfrenta bichos pelo caminho. Arraste um personagem para mudá-lo de lugar na faixa."
           checked={d.roam}
           onChange={(v) => set({ roam: v })}
         />

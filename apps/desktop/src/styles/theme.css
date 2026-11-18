@@ -308,7 +308,11 @@ input[type="checkbox"] { accent-color: var(--accent-dim); }
 .grimoire-item { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 7px 8px; background: none; border: 0; text-align: left; cursor: pointer; color: var(--text-dim); }
 .grimoire-item:hover { background: #ffffff08; }
 .grimoire-item[aria-current="true"] { background: #ffffff10; color: var(--text); }
-.grimoire-item.global { border-bottom: 2px solid var(--line); margin-bottom: 4px; }
+.grimoire-group { display: grid; gap: 2px; }
+.grimoire-group + .grimoire-group { border-top: 1px solid var(--line); padding-top: 6px; margin-top: 4px; }
+.grimoire-group-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-faint); padding: 4px 8px 2px; }
+.grimoire-item.project { padding-left: 18px; }
+.grimoire-choose { display: grid; gap: 10px; min-height: 30vh; align-content: start; }
 .grimoire-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .grimoire-item .tag { flex: none; white-space: nowrap; }
 .grimoire-editor { display: grid; gap: 12px; min-width: 0; }

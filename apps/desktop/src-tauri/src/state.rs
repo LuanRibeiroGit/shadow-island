@@ -1,5 +1,6 @@
 //! Shared application state managed by Tauri.
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
@@ -11,6 +12,7 @@ use crate::collector::server::CollectorServer;
 use crate::collector::CollectorStats;
 use crate::engine_host::EngineMsg;
 use crate::platform::{PlatformAdapter, Rect};
+use crate::roam::Roamers;
 
 pub struct AppState {
     pub data_dir: PathBuf,
@@ -25,10 +27,10 @@ pub struct AppState {
     pub token: String,
     pub settings: Mutex<Value>,
     /// Clickable regions of the overlay (logical px, window-relative).
-    pub overlay_hitboxes: Mutex<Vec<Rect>>,
+    pub overlay_hitboxes: Mutex<HashMap<String, Vec<Rect>>>,
     /// Width the overlay content needs (souls working), reported by the overlay page.
     pub overlay_content_width: Mutex<Option<u32>>,
-    pub overlay_content_height: Mutex<Option<u32>>,
+    pub roamers: Mutex<Roamers>,
 }
 
 impl AppState {

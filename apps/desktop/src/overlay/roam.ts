@@ -1,10 +1,10 @@
 import { stepWalker } from "@ids/game-engine";
+import type { Rect } from "@ids/shared";
 import type { OverlayArea } from "../bridge/backend";
-import type { FreePosition } from "../settings/schema";
 
 export interface RoamIo {
   area(): Promise<OverlayArea>;
-  move(x: number, y: number): Promise<void>;
+  move(x: number, y: number): Promise<Rect[]>;
 }
 
 export interface RoamBounds {
@@ -12,41 +12,80 @@ export interface RoamBounds {
   max: number;
 }
 
-export const ROAM_MIN_WIDTH = 300;
+export const ROAM_CONTENT_WIDTH = 300;
+export const ROAM_TARGET_TRIES = 12;
+export const ROAM_REST_MIN_MS = 1500;
+export const ROAM_REST_MAX_MS = 4000;
+export const ROAM_BLOCKED_REST_MS = 600;
 const BUBBLE_ROOM = 20;
 const MOB_ROOM = 56;
+export const ROAMER_MIN_WIDTH = 160;
+export const ROAMER_SPACING = 8;
 const DRAG_THRESHOLD = 4;
 
-export function roamSize(contentWidth: number, scale: number, showNames: boolean): { width: number; height: number } {
-  const characterHeight = 48 * scale;
-  return { width: Math.max(Math.round(contentWidth + 2 * MOB_ROOM * scale), ROAM_MIN_WIDTH), height: Math.ceil(characterHeight + BUBBLE_ROOM + (showNames ? 16 : 2)) };
+export function roamHeight(scale: number, showNames: boolean): number {
+  return Math.ceil(48 * scale + BUBBLE_ROOM + (showNames ? 16 : 2));
 }
 
-export function roamBounds(area: OverlayArea): RoamBounds {
+export const roamGap = (scale: number) => Math.round(64 * scale);
+
+export function roamBounds(width: number, scale: number): RoamBounds {
+  const margin = Math.round(28 * scale);
+  return { min: margin, max: Math.max(margin, width - margin) };
+}
+
+export function spawnX(others: number[], bounds: RoamBounds, rand: () => number = Math.random): number {
+  const stops = [...others.map((o) => Math.min(Math.max(o, bounds.min), bounds.max)), bounds.min, bounds.max].sort((a, b) => a - b);
+  let best = { from: bounds.min, to: bounds.max, room: -1 };
+  for (let i = 1; i < stops.length; i++) {
+    const from = stops[i - 1] ?? bounds.min;
+    const to = stops[i] ?? bounds.max;
+    const edge = i === 1 || i === stops.length - 1;
+    const room = (to - from) * (edge && others.length > 0 ? 2 : 1);
+    if (room > best.room) best = { from, to, room };
+  }
+  const leftEdge = others.length > 0 && best.from === bounds.min;
+  const rightEdge = others.length > 0 && best.to === bounds.max;
+  const center = leftEdge ? best.from + (best.to - best.from) / 3 : rightEdge ? best.to - (best.to - best.from) / 3 : (best.from + best.to) / 2;
+  const jitter = (rand() * 2 - 1) * (best.to - best.from) * 0.15;
+  return Math.round(Math.min(Math.max(center + jitter, bounds.min), bounds.max));
+}
+
+export function nextRoamTarget(x: number, others: number[], bounds: RoamBounds, gap: number, rand: () => number = Math.random): number {
+  for (let i = 0; i < ROAM_TARGET_TRIES; i++) {
+    const c = Math.round(bounds.min + rand() * (bounds.max - bounds.min));
+    if (Math.abs(c - x) < gap / 2) continue;
+    if (others.some((o) => Math.abs(c - o) < gap)) continue;
+    if (others.some((o) => (o - x) * (c - x) > 0 && Math.abs(o - x) < Math.abs(c - x))) continue;
+    return c;
+  }
+  return x;
+}
+
+export function blockedAhead(from: number, to: number, others: number[], gap: number): boolean {
+  const dir = Math.sign(to - from);
+  if (dir === 0) return false;
+  return others.some((o) => {
+    const ahead = (o - from) * dir;
+    return ahead > 0 && Math.abs(o - to) < gap;
+  });
+}
+
+export function restAfterLeg(rand: () => number = Math.random): number {
+  return ROAM_REST_MIN_MS + Math.round(rand() * (ROAM_REST_MAX_MS - ROAM_REST_MIN_MS));
+}
+
+export function roamerWidth(scale: number): number {
+  return Math.max(ROAMER_MIN_WIDTH, Math.round(48 * scale + 2 * MOB_ROOM * scale));
+}
+
+export function windowBounds(area: OverlayArea): RoamBounds {
   const min = area.work.x;
   return { min, max: Math.max(min, area.work.x + area.work.width - area.window.width) };
 }
 
-export function nextRoamTarget(x: number, bounds: RoamBounds, seed: number): number {
-  const span = bounds.max - bounds.min;
-  if (span <= 0) return bounds.min;
-  const third = (span / 3) * fraction(seed);
-  const goRight = x - bounds.min < span / 2;
-  return Math.round(goRight ? bounds.max - third : bounds.min + third);
-}
-
-export function restAfterLeg(seed: number): number {
-  return 1500 + Math.round(fraction(seed) * 2500);
-}
-
-export function freePositionOf(area: OverlayArea): FreePosition | null {
-  if (!area.name) return null;
-  return { monitor: area.name, x: area.window.x - area.monitor.x, bottom: area.window.y + area.window.height - area.monitor.y };
-}
-
-function fraction(seed: number): number {
-  const r = Math.sin(seed * 12.9898) * 43758.5453;
-  return r - Math.floor(r);
+export function laneNeighbours(window: Rect, peers: Rect[]): number[] {
+  return peers.filter((p) => p.y < window.y + window.height && window.y < p.y + p.height).map((p) => p.x);
 }
 
 interface DragStart {
@@ -59,6 +98,7 @@ interface DragStart {
 
 export class Roamer {
   private area: OverlayArea | null = null;
+  private peers: Rect[] = [];
   private x = 0;
   private target: number | null = null;
   private restUntil = 0;
@@ -68,7 +108,10 @@ export class Roamer {
   private inFlight = false;
   private queued: [number, number] | null = null;
 
-  constructor(private readonly io: RoamIo) {}
+  constructor(
+    private readonly io: RoamIo,
+    private readonly rand: () => number = Math.random,
+  ) {}
 
   get current(): OverlayArea | null {
     return this.area;
@@ -105,11 +148,23 @@ export class Roamer {
       void this.refresh();
       return null;
     }
+    const gap = area.window.width + ROAMER_SPACING;
+    const others = laneNeighbours(area.window, this.peers);
     if (this.target === null) {
       if (now < this.restUntil) return null;
-      this.target = nextRoamTarget(this.x, roamBounds(area), now / 1000);
+      const target = nextRoamTarget(this.x, others, windowBounds(area), gap, this.rand);
+      if (target === this.x) {
+        this.restUntil = now + ROAM_BLOCKED_REST_MS;
+        return null;
+      }
+      this.target = target;
     }
     const step = stepWalker({ x: this.x, targetX: this.target, facing: 1 }, dtMs, speed);
+    if (blockedAhead(this.x, step.x, others, gap)) {
+      this.target = null;
+      this.restUntil = now + ROAM_BLOCKED_REST_MS;
+      return null;
+    }
     this.x = step.x;
     const x = Math.round(this.x);
     if (x !== area.window.x) {
@@ -118,7 +173,7 @@ export class Roamer {
     }
     if (this.x === this.target) {
       this.target = null;
-      this.restUntil = now + restAfterLeg(now / 1000);
+      this.restUntil = now + restAfterLeg(this.rand);
     }
     return step.facing;
   }
@@ -146,21 +201,18 @@ export class Roamer {
     this.push(x, y);
   }
 
-  async endDrag(): Promise<{ moved: boolean; area: OverlayArea | null }> {
+  async endDrag(): Promise<{ moved: boolean }> {
     const d = this.drag;
     this.drag = null;
-    if (!d?.moved) return { moved: false, area: this.area };
+    if (!d?.moved) return { moved: false };
     await this.settled();
-    try {
-      this.adopt(await this.io.area());
-    } catch {
-      return { moved: true, area: this.area };
-    }
-    return { moved: true, area: this.area };
+    await this.refresh();
+    return { moved: true };
   }
 
   private adopt(a: OverlayArea) {
     this.area = a;
+    this.peers = a.peers ?? [];
     this.x = a.window.x;
     this.target = null;
   }
@@ -173,6 +225,9 @@ export class Roamer {
     this.inFlight = true;
     void this.io
       .move(x, y)
+      .then((peers) => {
+        this.peers = peers;
+      })
       .catch(() => {})
       .finally(() => {
         this.inFlight = false;

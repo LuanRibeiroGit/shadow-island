@@ -5,6 +5,7 @@ mod commands;
 mod engine_host;
 mod logging;
 mod platform;
+mod roam;
 mod settings;
 mod state;
 mod windows;
@@ -116,6 +117,7 @@ pub(crate) fn apply_settings(app: &AppHandle, before: Option<&BackendSettings>) 
         .unwrap_or(true);
     if overlay_changed {
         windows::set_overlay_visible(app, s.desktop.overlay_enabled);
+        windows::relayout_roamers(app);
     }
 }
 
@@ -151,9 +153,9 @@ fn setup(app: &mut tauri::App, adapter: PlatformAdapter, background: bool) -> Re
         collector: Mutex::new(None),
         token: runtime::new_token(),
         settings: Mutex::new(stored),
-        overlay_hitboxes: Mutex::new(Vec::new()),
+        overlay_hitboxes: Mutex::new(HashMap::new()),
         overlay_content_width: Mutex::new(None),
-        overlay_content_height: Mutex::new(None),
+        roamers: Mutex::new(roam::Roamers::default()),
     });
 
     let state = handle.state::<AppState>();
@@ -218,6 +220,8 @@ pub fn run() {
             commands::window::set_overlay_content_width,
             commands::window::overlay_area,
             commands::window::move_overlay,
+            commands::window::sync_roamers,
+            commands::window::claim_road_fight,
             commands::window::quit_app,
             commands::system::get_settings,
             commands::system::save_settings,

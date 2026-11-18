@@ -8,7 +8,9 @@ import { useSettings } from "../stores/settings";
 import { useCharacters } from "../stores/characters";
 import { useCrew } from "../stores/crew";
 import { OverlayScene, compactWidth, type ScreenPos } from "./scene";
-import { Roamer, freePositionOf, roamSize } from "./roam";
+import { Roamer, roamGap, roamHeight, roamerWidth } from "./roam";
+import { ROAD_STAGGER_MS } from "./road";
+import { BUBBLE_MAX_WIDTH, LABEL_SPACING, LABEL_TURN_MS, bubbleWidth, clampCenter, labelBox, nameWidth, visibleLabels } from "./labels";
 import { workSpeech } from "../castle/speech";
 import { desktopCrew, nextCrewChange } from "./crew";
 
@@ -27,10 +29,12 @@ export function OverlayApp() {
   const world = useWorld((s) => s.world);
   const settings = useSettings((s) => s.settings);
   const roaming = settings.desktop.roam;
+  const soloAgent = useMemo(() => new URLSearchParams(window.location.search).get("agent"), []);
+  const solo = roaming && soloAgent !== null;
   const roamer = useMemo(() => new Roamer({ area: () => backend().then((b) => b.overlayArea()), move: (x, y) => backend().then((b) => b.moveOverlay(x, y)) }), []);
   const [dragging, setDragging] = useState(false);
-  const roamingRef = useRef(roaming);
-  roamingRef.current = roaming;
+  const soloRef = useRef(solo);
+  soloRef.current = solo;
 
   useEffect(() => {
     void useWorld.getState().init();
@@ -51,8 +55,9 @@ export function OverlayApp() {
     scene.current = s;
     // Clicking a character opens its page in the castle window: the strip stays thin.
     const openAgent = (id: string) => void backend().then((b) => b.showCastle(`agent/${encodeURIComponent(id)}`));
+    s.setFightGate(() => backend().then((b) => b.claimRoadFight(ROAD_STAGGER_MS)));
     s.setCallbacks(setPositions, openAgent, (id, e) => {
-      if (!roamingRef.current || !roamer.startDrag(e.screenX, e.screenY)) return;
+      if (!soloRef.current || !roamer.startDrag(e.screenX, e.screenY)) return;
       const el = e.target instanceof HTMLElement ? e.target : document.body;
       capturePointer(el, e.pointerId);
       setDragging(true);
@@ -61,12 +66,9 @@ export function OverlayApp() {
         el.removeEventListener("pointermove", move);
         el.removeEventListener("pointerup", up);
         el.removeEventListener("pointercancel", up);
-        void roamer.endDrag().then(({ moved, area }) => {
+        void roamer.endDrag().then(({ moved }) => {
           setDragging(false);
-          if (!moved) return openAgent(id);
-          const spot = area && freePositionOf(area);
-          if (!spot) return;
-          void useSettings.getState().update((st) => ({ ...st, desktop: { ...st.desktop, monitor: spot.monitor, freePosition: spot } }));
+          if (!moved) openAgent(id);
         });
       };
       el.addEventListener("pointermove", move);
@@ -80,7 +82,8 @@ export function OverlayApp() {
   // Only agents that are actually working show up on the desktop: idle and finished
   // agents are asleep in the castle, so the strip stays empty (and hidden) between tasks.
   const [clock, setClock] = useState(0);
-  const agents = useMemo(() => desktopCrew(activeAgents(world), world.recentAgents, Date.now()), [world, clock]);
+  const crew = useMemo(() => desktopCrew(activeAgents(world), world.recentAgents, Date.now()), [world, clock]);
+  const agents = useMemo(() => (soloAgent !== null ? crew.filter((a) => a.id === soloAgent) : roaming ? [] : crew), [crew, soloAgent, roaming]);
   useEffect(() => {
     const now = Date.now();
     const at = nextCrewChange([...activeAgents(world), ...world.recentAgents], now);
@@ -95,9 +98,9 @@ export function OverlayApp() {
   useEffect(() => {
     if (!ready || !scene.current) return;
     const d = settings.desktop;
-    scene.current.setOptions({ scale: d.characterScale / 2, animationSpeed: d.animationSpeed, animationsEnabled: d.animationsEnabled, walkSpeed: d.walkSpeed, showNames: d.showNames, compact: d.autoWidth || d.roam, roam: d.roam }, custom);
+    scene.current.setOptions({ scale: d.characterScale / 2, animationSpeed: d.animationSpeed, animationsEnabled: d.animationsEnabled, walkSpeed: d.walkSpeed, showNames: d.showNames, compact: d.autoWidth, roam: d.roam, solo }, custom);
     void scene.current.sync(agents, encounters, Date.now());
-  }, [ready, agents, encounters, settings.desktop, custom]);
+  }, [ready, agents, encounters, settings.desktop, custom, solo]);
 
   // Speech bubbles from real events, rate-limited by the scheduler.
   useEffect(() => {
@@ -125,36 +128,34 @@ export function OverlayApp() {
   }, [agents, world, scheduler, settings.desktop.showMessages, roaming]);
 
   // Auto-hide the strip when nobody is around (no click blocking on Wayland).
-  const hasAgents = agents.length > 0;
+  const hasAgents = crew.length > 0;
   useEffect(() => {
-    if (!settings.desktop.overlayEnabled) return;
+    if (!settings.desktop.overlayEnabled || soloAgent !== null) return;
     const t = window.setTimeout(() => void backend().then((b) => b.setOverlayVisible(hasAgents)), hasAgents ? 0 : 6000);
     return () => window.clearTimeout(t);
-  }, [hasAgents, settings.desktop.overlayEnabled]);
+  }, [hasAgents, settings.desktop.overlayEnabled, soloAgent]);
 
   // Compact strip: ask for just the width of the souls working right now.
-  const want = compactWidth(agents.length, settings.desktop.characterScale / 2);
-  const roamBox = roamSize(want, settings.desktop.characterScale / 2, settings.desktop.showNames);
+  const want = compactWidth(crew.length, settings.desktop.characterScale / 2);
+  const roamerBox = { width: roamerWidth(settings.desktop.characterScale / 2), height: roamHeight(settings.desktop.characterScale / 2, settings.desktop.showNames) };
+  const crewIds = crew.map((a) => a.id).join("\n");
   useEffect(() => {
-    if (agents.length === 0) return;
-    if (roaming) {
-      void backend()
-        .then((b) => b.setOverlayContentWidth(roamBox.width, roamBox.height))
-        .then(() => roamer.refresh());
-      return;
-    }
-    if (!settings.desktop.autoWidth) return;
+    if (soloAgent !== null) return;
+    void backend().then((b) => b.syncRoamers(roaming && crewIds ? crewIds.split("\n") : [], roamerBox.width, roamerBox.height));
+  }, [soloAgent, roaming, crewIds, roamerBox.width, roamerBox.height, settings.desktop.overlayEnabled]);
+  useEffect(() => {
+    if (soloAgent !== null || roaming || crew.length === 0 || !settings.desktop.autoWidth) return;
     void backend().then((b) => b.setOverlayContentWidth(want));
-  }, [want, agents.length, settings.desktop.autoWidth, roaming, roamBox.width, roamBox.height, roamer]);
+  }, [want, crew.length, settings.desktop.autoWidth, roaming, soloAgent]);
 
   useEffect(() => {
-    if (roaming && hasAgents) void roamer.refresh();
-  }, [roaming, hasAgents, settings.desktop.monitor, settings.desktop.freePosition, settings.desktop.placement, settings.desktop.align, roamer]);
+    if (solo) void roamer.refresh();
+  }, [solo, roamer, roamerBox.width, roamerBox.height, settings.desktop.monitor, settings.desktop.placement]);
 
   const agentsRef = useRef(agents);
   agentsRef.current = agents;
   useEffect(() => {
-    if (!roaming || !hasAgents || !settings.desktop.animationsEnabled) {
+    if (!solo || !settings.desktop.animationsEnabled) {
       scene.current?.setTravel(null);
       return;
     }
@@ -174,7 +175,7 @@ export function OverlayApp() {
       window.clearInterval(t);
       scene.current?.setTravel(null);
     };
-  }, [roaming, hasAgents, settings.desktop.animationsEnabled, settings.desktop.walkSpeed, roamer]);
+  }, [solo, settings.desktop.animationsEnabled, settings.desktop.walkSpeed, roamer]);
 
   // Report clickable areas so the rest of the strip is click-through.
   useEffect(() => {
@@ -192,15 +193,45 @@ export function OverlayApp() {
   }, [positions, dragging]);
   const lastBoxes = useRef("");
   const scale = settings.desktop.characterScale / 2;
+  const stripWidth = window.innerWidth;
+  const turn = Math.floor(Date.now() / LABEL_TURN_MS);
+  const nameOf = (id: string) => {
+    const a = agents.find((x) => x.id === id);
+    return a ? resolveCharacter(a, custom).name : "";
+  };
+  const roamBubbles = roaming
+    ? positions.filter((p) => bubbles[p.id] && bubbleBottom(p, scale) >= BUBBLE_HEIGHT).map((p) => labelBox(p.id, p.x, bubbleWidth(textWidth(bubbles[p.id]?.text ?? "", 12)), stripWidth))
+    : [];
+  const shownBubbles = visibleLabels(roamBubbles, turn);
+  const roamNames = roaming && settings.desktop.showNames ? positions.map((p) => labelBox(p.id, p.x, nameWidth(textWidth(nameOf(p.id), 10), solo ? stripWidth : roamGap(scale)), stripWidth)) : [];
+  const shownNames = visibleLabels(roamNames, turn);
 
   return (
-    <div className="overlay-root" data-crew={positions.length}>
+    <div className="overlay-root" data-crew={positions.length} data-roamers={soloAgent === null && roaming ? crewIds.split("\n").filter(Boolean).join(" ") : undefined}>
       <div ref={host} style={{ position: "absolute", inset: 0 }} />
       {positions.map((p) => {
         const a = agents.find((x) => x.id === p.id);
         if (!a) return null;
         const b = bubbles[p.id];
         const ch = resolveCharacter(a, custom);
+        if (roaming) {
+          const bubble = roamBubbles.find((x) => x.id === p.id);
+          const name = roamNames.find((x) => x.id === p.id);
+          return (
+            <div key={p.id}>
+              {b && bubble && shownBubbles.has(p.id) && (
+                <div className="bubble" style={{ left: bubble.center, top: bubbleBottom(p, scale), maxWidth: BUBBLE_MAX_WIDTH }}>
+                  {b.text}
+                </div>
+              )}
+              {name && shownNames.has(p.id) && (
+                <div className="nameplate" style={{ left: name.center, top: p.y - 2, maxWidth: Math.max(24, (solo ? stripWidth : roamGap(scale)) - LABEL_SPACING), overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {ch.name}
+                </div>
+              )}
+            </div>
+          );
+        }
         return (
           <div key={p.id}>
             {/* Bubbles need room above the head: a strip as tall as the souls shows none. */}
@@ -219,7 +250,16 @@ const BUBBLE_HEIGHT = 24;
 const bubbleBottom = (p: ScreenPos, scale: number) => p.top + Math.round(6 * scale);
 
 function clampX(x: number, half: number): number {
-  return Math.min(Math.max(x, half), Math.max(half, window.innerWidth - half));
+  return clampCenter(x, half, window.innerWidth);
+}
+
+let measure: { ctx: CanvasRenderingContext2D | null; family: string } | null = null;
+
+function textWidth(text: string, size: number): number {
+  measure ??= { ctx: document.createElement("canvas").getContext("2d"), family: getComputedStyle(document.body).fontFamily || "sans-serif" };
+  if (!measure.ctx) return text.length * size * 0.6;
+  measure.ctx.font = `${size}px ${measure.family}`;
+  return measure.ctx.measureText(text).width;
 }
 
 function capturePointer(el: Element, pointerId: number): boolean {

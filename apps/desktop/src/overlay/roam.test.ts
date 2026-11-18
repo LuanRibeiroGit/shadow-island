@@ -1,79 +1,99 @@
 import { describe, expect, it } from "vitest";
-import type { OverlayArea } from "../bridge/backend";
-import { Roamer, freePositionOf, nextRoamTarget, roamBounds, roamSize, type RoamIo } from "./roam";
+import { ROAM_REST_MAX_MS, ROAM_REST_MIN_MS, blockedAhead, nextRoamTarget, restAfterLeg, roamBounds, roamGap, roamHeight, spawnX, Roamer, laneNeighbours, roamerWidth } from "./roam";
 
-const area = (x = 1620, y = 930): OverlayArea => ({
-  name: "HDMI-1",
-  window: { x, y, width: 300, height: 110 },
-  monitor: { x: 0, y: 0, width: 1920, height: 1080 },
-  work: { x: 0, y: 0, width: 1920, height: 1040 },
+const sequence = (...values: number[]) => {
+  let i = 0;
+  return () => values[i++ % values.length] ?? 0;
+};
+
+describe("roaming along the strip", () => {
+  it("is as low as a soul with its bubble and name", () => {
+    expect(roamHeight(1, false)).toBe(70);
+    expect(roamHeight(2, true)).toBe(132);
+  });
+
+  it("keeps the souls inside the strip and a soul apart from each other", () => {
+    expect(roamBounds(1920, 1)).toEqual({ min: 28, max: 1892 });
+    expect(roamBounds(20, 1)).toEqual({ min: 28, max: 28 });
+    expect(roamGap(1)).toBe(64);
+    expect(roamGap(1.5)).toBe(96);
+  });
+
+  it("spreads newcomers over the free room of the strip", () => {
+    const bounds = { min: 0, max: 1200 };
+    const mid = () => 0.5;
+    const first = spawnX([], bounds, mid);
+    expect(first).toBe(600);
+    const second = spawnX([first], bounds, mid);
+    expect(second).toBe(200);
+    const third = spawnX([first, second], bounds, mid);
+    expect(third).toBe(1000);
+    const xs = [first, second, third, spawnX([first, second, third], bounds, mid)].sort((a, b) => a - b);
+    xs.slice(1).forEach((x, i) => expect(x - (xs[i] ?? 0)).toBeGreaterThanOrEqual(roamGap(1)));
+  });
+
+  it("picks a target of its own, away from the others and without walking through them", () => {
+    const bounds = { min: 0, max: 1000 };
+    expect(nextRoamTarget(500, [], bounds, 64, () => 0.9)).toBe(900);
+    expect(nextRoamTarget(500, [880], bounds, 64, sequence(0.9, 0.82, 0.2))).toBe(200);
+    expect(nextRoamTarget(500, [700], bounds, 64, sequence(0.9, 0.62))).toBe(620);
+    expect(nextRoamTarget(500, [], bounds, 64, () => 0.51)).toBe(500);
+  });
+
+  it("stays put when there is no room to go anywhere", () => {
+    expect(nextRoamTarget(100, [40, 160], { min: 0, max: 200 }, 64, Math.random)).toBe(100);
+  });
+
+  it("does not choose the same targets for walkers with different luck", () => {
+    const bounds = { min: 0, max: 1600 };
+    const a = nextRoamTarget(800, [], bounds, 64, sequence(0.1));
+    const b = nextRoamTarget(800, [], bounds, 64, sequence(0.8));
+    expect(a).not.toBe(b);
+  });
+
+  it("stops before stepping too close to someone ahead, but can always step away", () => {
+    expect(blockedAhead(100, 102, [160], 64)).toBe(true);
+    expect(blockedAhead(100, 98, [160], 64)).toBe(false);
+    expect(blockedAhead(100, 102, [40], 64)).toBe(false);
+    expect(blockedAhead(100, 100, [120], 64)).toBe(false);
+    expect(blockedAhead(100, 101, [100], 64)).toBe(false);
+  });
+
+  it("rests for a while of its own after each leg", () => {
+    expect(restAfterLeg(() => 0)).toBe(ROAM_REST_MIN_MS);
+    expect(restAfterLeg(() => 1)).toBe(ROAM_REST_MAX_MS);
+  });
 });
 
-function fakeIo(start: OverlayArea) {
-  const moves: [number, number][] = [];
-  let current = start;
-  const io: RoamIo = {
-    area: async () => current,
-    move: async (x, y) => {
-      moves.push([x, y]);
-      current = { ...current, window: { ...current.window, x, y } };
-    },
-  };
-  return { io, moves };
-}
+describe("roamer windows", () => {
+  const work = { x: 0, y: 0, width: 1000, height: 1000 };
+  const area = (x: number, peers: { x: number; y: number; width: number; height: number }[]) => ({ name: null, monitor: work, work, window: { x, y: 930, width: 160, height: 70 }, peers });
 
-describe("roaming across the screen", () => {
-  it("keeps the window inside the work area", () => {
-    expect(roamBounds(area())).toEqual({ min: 0, max: 1620 });
+  it("fits the soul, its mob on either side and a bubble", () => {
+    expect(roamerWidth(1)).toBe(160);
+    expect(roamerWidth(2)).toBe(320);
   });
 
-  it("always heads for the other side of the screen", () => {
-    const bounds = { min: 0, max: 1620 };
-    for (const seed of [1, 2.5, 7, 13.3]) {
-      expect(nextRoamTarget(1500, bounds, seed)).toBeLessThanOrEqual(540);
-      expect(nextRoamTarget(100, bounds, seed)).toBeGreaterThanOrEqual(1080);
-    }
-    expect(nextRoamTarget(10, { min: 50, max: 50 }, 3)).toBe(50);
+  it("only counts the windows on the same lane", () => {
+    const window = { x: 0, y: 930, width: 160, height: 70 };
+    expect(laneNeighbours(window, [{ x: 300, y: 930, width: 160, height: 70 }, { x: 600, y: 500, width: 160, height: 70 }])).toEqual([300]);
   });
 
-  it("is tall enough for the speech bubble and wide enough for the line and a mob on each side", () => {
-    expect(roamSize(64, 1, false)).toEqual({ width: 300, height: 70 });
-    expect(roamSize(640, 2, true)).toEqual({ width: 864, height: 132 });
+  it("never walks into another window", async () => {
+    const moves: number[] = [];
+    const roamer = new Roamer({ area: async () => area(100, [{ x: 400, y: 930, width: 160, height: 70 }]), move: async (x) => (moves.push(x), [{ x: 400, y: 930, width: 160, height: 70 }]) }, () => 0);
+    await roamer.refresh();
+    for (let t = 0; t < 400; t++) roamer.tick(10_000 + t * 50, 50, 200, true);
+    expect(moves.length).toBeGreaterThan(0);
+    for (const x of moves) expect(Math.abs(x - 400)).toBeGreaterThanOrEqual(168);
   });
 
-  it("remembers the drop point relative to its monitor", () => {
-    const second = { ...area(2400, 590), monitor: { x: 1920, y: 0, width: 2560, height: 1440 } };
-    expect(freePositionOf(second)).toEqual({ monitor: "HDMI-1", x: 480, bottom: 700 });
-    expect(freePositionOf({ ...second, name: null })).toBeNull();
-  });
-
-  it("walks the window along its floor only while the agent is walking", async () => {
-    const { io, moves } = fakeIo(area());
-    const r = new Roamer(io);
-    await r.refresh();
-    expect(r.tick(10_000, 100, 40, false)).toBeNull();
+  it("stays put when every spot is taken", async () => {
+    const moves: number[] = [];
+    const peers = [{ x: 0, y: 930, width: 160, height: 70 }, { x: 840, y: 930, width: 160, height: 70 }, { x: 600, y: 930, width: 160, height: 70 }];
+    const roamer = new Roamer({ area: async () => area(420, peers), move: async (x) => (moves.push(x), peers) }, () => 0.5);
+    await roamer.refresh();
+    for (let t = 0; t < 100; t++) roamer.tick(10_000 + t * 50, 50, 200, true);
     expect(moves).toEqual([]);
-    expect(r.tick(10_100, 100, 40, true)).toBeNull();
-    await r.refresh();
-    expect(r.tick(10_200, 100, 40, true)).toBe(-1);
-    expect(moves).toEqual([[1616, 930]]);
-  });
-
-  it("follows the mouse while dragged and tells a click from a drag", async () => {
-    const { io, moves } = fakeIo(area());
-    const r = new Roamer(io);
-    await r.refresh();
-    expect(r.startDrag(500, 500)).toBe(true);
-    r.dragTo(502, 501);
-    expect(await r.endDrag()).toEqual({ moved: false, area: area() });
-    expect(moves).toEqual([]);
-
-    r.startDrag(500, 500);
-    r.dragTo(400, 200);
-    expect(r.tick(20_000, 100, 40, true)).toBeNull();
-    const end = await r.endDrag();
-    expect(end.moved).toBe(true);
-    expect(end.area?.window).toMatchObject({ x: 1520, y: 630 });
-    expect(moves).toEqual([[1520, 630]]);
   });
 });

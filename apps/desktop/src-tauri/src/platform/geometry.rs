@@ -67,46 +67,52 @@ pub fn overlay_rect_fit(monitor: Rect, work_area: Option<Rect>, placement: Overl
     Rect { x, y, width, height }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Anchor {
-    pub x: i32,
-    pub bottom: i32,
-}
-
 #[allow(clippy::too_many_arguments)]
-pub fn roam_rect(monitor: Rect, work_area: Option<Rect>, placement: OverlayPlacement, align: OverlayAlign, width: u32, height: u32, anchor: Option<Anchor>) -> Rect {
+pub fn roam_spawn(monitor: Rect, work_area: Option<Rect>, placement: OverlayPlacement, width: u32, height: u32, bottom: Option<i32>, taken: &[Rect]) -> Rect {
     let wa = work_area.filter(|w| w.width > 0 && w.height > 0).unwrap_or(monitor);
-    let width = width.min(wa.width).max(48.min(wa.width));
+    let width = width.clamp(1, wa.width.max(1));
     let height = height.min(monitor.height).max(32.min(monitor.height));
-    let default_x = match align {
-        OverlayAlign::Left => wa.x,
-        OverlayAlign::Center => wa.x + ((wa.width - width) / 2) as i32,
-        OverlayAlign::Right => wa.x + (wa.width - width) as i32,
+    let h = height as i32;
+    let (top, floor) = match placement {
+        OverlayPlacement::Taskbar => (monitor.y, monitor.y + monitor.height as i32),
+        OverlayPlacement::Bottom | OverlayPlacement::Top => (wa.y, wa.y + wa.height as i32),
     };
+    let ceiling = (top + h).min(floor);
     let default_bottom = match placement {
-        OverlayPlacement::Bottom => wa.y + wa.height as i32,
-        OverlayPlacement::Top => wa.y + height as i32,
-        OverlayPlacement::Taskbar => monitor.y + monitor.height as i32,
+        OverlayPlacement::Top => ceiling,
+        OverlayPlacement::Bottom | OverlayPlacement::Taskbar => floor,
     };
-    let (x, bottom) = anchor.map(|a| (a.x, a.bottom)).unwrap_or((default_x, default_bottom));
-    let x = x.clamp(monitor.x, monitor.x + (monitor.width - width) as i32);
-    let bottom = bottom.clamp(monitor.y + height as i32, monitor.y + monitor.height as i32);
-    Rect { x, y: bottom - height as i32, width, height }
+    let first = bottom.unwrap_or(default_bottom).clamp(ceiling, floor);
+    let step = if placement == OverlayPlacement::Top { h } else { -h };
+    let (min_x, max_x) = (wa.x, wa.x + (wa.width - width) as i32);
+    let lane = |bottom: i32| taken.iter().filter(|r| r.y < bottom && bottom - h < r.y + r.height as i32).map(|r| r.x).collect::<Vec<_>>();
+    let mut bottom = first;
+    while (ceiling..=floor).contains(&bottom) {
+        if let Some(x) = free_x(min_x, max_x, &lane(bottom), 2 * width as i32) {
+            return Rect { x, y: bottom - h, width, height };
+        }
+        bottom += step;
+    }
+    let x = free_x(min_x, max_x, &lane(first), width as i32).unwrap_or(min_x);
+    Rect { x, y: first - h, width, height }
 }
 
-pub fn monitor_at(monitors: &[Rect], x: i32, y: i32) -> Option<usize> {
-    let contains = |m: &Rect| x >= m.x && y >= m.y && x < m.x + m.width as i32 && y < m.y + m.height as i32;
-    monitors.iter().position(contains).or_else(|| {
-        monitors
-            .iter()
-            .enumerate()
-            .min_by_key(|(_, m)| {
-                let cx = x.clamp(m.x, m.x + m.width as i32);
-                let cy = y.clamp(m.y, m.y + m.height as i32);
-                (cx - x).unsigned_abs() as u64 + (cy - y).unsigned_abs() as u64
-            })
-            .map(|(i, _)| i)
-    })
+pub fn free_x(min: i32, max: i32, taken: &[i32], spacing: i32) -> Option<i32> {
+    if taken.is_empty() {
+        return (min <= max).then_some(min + (max - min) / 2);
+    }
+    let mut sorted = taken.to_vec();
+    sorted.sort_unstable();
+    let room = |x: i32| sorted.iter().map(|t| (x - t).abs()).min().unwrap_or(i32::MAX);
+    let between = sorted.windows(2).map(|p| p[0] + (p[1] - p[0]) / 2).filter(|x| (min..=max).contains(x));
+    std::iter::once(min)
+        .chain(between)
+        .chain(std::iter::once(max))
+        .filter(|&x| room(x) >= spacing)
+        .fold(None, |best: Option<i32>, x| match best {
+            Some(b) if room(b) >= room(x) => Some(b),
+            _ => Some(x),
+        })
 }
 
 #[cfg(test)]
@@ -156,29 +162,60 @@ mod tests {
     }
 
     #[test]
-    fn roams_from_the_default_corner() {
+    fn the_first_roamer_is_born_in_the_middle_of_the_bottom_lane() {
         let wa = Rect { x: 0, y: 0, width: 1920, height: 1040 };
-        let r = roam_rect(MON, Some(wa), OverlayPlacement::Bottom, OverlayAlign::Right, 300, 110, None);
-        assert_eq!(r, Rect { x: 1620, y: 930, width: 300, height: 110 });
-        let r = roam_rect(MON, Some(wa), OverlayPlacement::Taskbar, OverlayAlign::Left, 300, 110, None);
-        assert_eq!(r, Rect { x: 0, y: 970, width: 300, height: 110 });
+        let r = roam_spawn(MON, Some(wa), OverlayPlacement::Bottom, 160, 70, None, &[]);
+        assert_eq!(r, Rect { x: 880, y: 970, width: 160, height: 70 });
+        let r = roam_spawn(MON, Some(wa), OverlayPlacement::Taskbar, 160, 70, None, &[]);
+        assert_eq!(r.y, 1010);
+        let top = Rect { x: 64, y: 32, width: 1856, height: 1048 };
+        let r = roam_spawn(MON, Some(top), OverlayPlacement::Top, 160, 70, None, &[]);
+        assert_eq!(r, Rect { x: 912, y: 32, width: 160, height: 70 });
     }
 
     #[test]
-    fn roams_from_where_it_was_dropped_but_stays_on_the_monitor() {
+    fn newcomers_are_born_a_window_away_from_everyone() {
+        let wa = Rect { x: 0, y: 0, width: 1920, height: 1040 };
+        let mut taken: Vec<Rect> = vec![];
+        for _ in 0..5 {
+            let r = roam_spawn(MON, Some(wa), OverlayPlacement::Bottom, 160, 70, None, &taken);
+            assert_eq!(r.y, 970);
+            for t in &taken {
+                assert!((r.x - t.x).abs() >= 320, "{r:?} too close to {t:?}");
+            }
+            taken.push(r);
+        }
+        assert_eq!(taken.iter().map(|r| r.x).collect::<Vec<_>>(), vec![880, 0, 1760, 440, 1320]);
+    }
+
+    #[test]
+    fn a_full_lane_sends_the_newcomer_one_lane_further() {
+        let wa = Rect { x: 0, y: 0, width: 400, height: 1040 };
+        let first = roam_spawn(MON, Some(wa), OverlayPlacement::Bottom, 160, 70, None, &[]);
+        let second = roam_spawn(MON, Some(wa), OverlayPlacement::Bottom, 160, 70, None, &[first]);
+        assert_eq!(second.y, first.y - 70);
+        let top = Rect { x: 0, y: 32, width: 400, height: 1048 };
+        let first = roam_spawn(MON, Some(top), OverlayPlacement::Top, 160, 70, None, &[]);
+        let second = roam_spawn(MON, Some(top), OverlayPlacement::Top, 160, 70, None, &[first]);
+        assert_eq!(second.y, first.y + 70);
+    }
+
+    #[test]
+    fn honors_the_dropped_height_but_never_goes_over_the_taskbar() {
         let m2 = Rect { x: 1920, y: 0, width: 2560, height: 1440 };
-        let r = roam_rect(m2, None, OverlayPlacement::Bottom, OverlayAlign::Right, 300, 110, Some(Anchor { x: 2400, bottom: 700 }));
-        assert_eq!(r, Rect { x: 2400, y: 590, width: 300, height: 110 });
-        let r = roam_rect(m2, None, OverlayPlacement::Bottom, OverlayAlign::Right, 300, 110, Some(Anchor { x: 9000, bottom: 20 }));
-        assert_eq!(r, Rect { x: 4180, y: 0, width: 300, height: 110 });
+        let wa2 = Rect { x: 1920, y: 0, width: 2560, height: 1400 };
+        let r = roam_spawn(m2, Some(wa2), OverlayPlacement::Bottom, 160, 110, Some(700), &[]);
+        assert_eq!(r, Rect { x: 3120, y: 590, width: 160, height: 110 });
+        assert_eq!(roam_spawn(m2, Some(wa2), OverlayPlacement::Bottom, 160, 110, Some(1440), &[]).y, 1290);
+        assert_eq!(roam_spawn(m2, Some(wa2), OverlayPlacement::Bottom, 160, 110, Some(20), &[]).y, 0);
     }
 
     #[test]
-    fn finds_the_monitor_under_a_point() {
-        let monitors = [MON, Rect { x: 1920, y: 0, width: 2560, height: 1440 }];
-        assert_eq!(monitor_at(&monitors, 100, 100), Some(0));
-        assert_eq!(monitor_at(&monitors, 2000, 1200), Some(1));
-        assert_eq!(monitor_at(&monitors, 1000, 1300), Some(0));
-        assert_eq!(monitor_at(&[], 0, 0), None);
+    fn finds_the_widest_free_room_or_none() {
+        assert_eq!(free_x(0, 1000, &[], 100), Some(500));
+        assert_eq!(free_x(0, 1000, &[300], 100), Some(1000));
+        assert_eq!(free_x(0, 1000, &[100, 900], 100), Some(500));
+        assert_eq!(free_x(0, 200, &[100], 100), Some(0));
+        assert_eq!(free_x(0, 200, &[100], 150), None);
     }
 }

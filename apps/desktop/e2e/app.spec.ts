@@ -76,17 +76,27 @@ test("character customization persists per specialty", async ({ page }) => {
   await expect(card).toContainText("Sentinela de Osso");
 });
 
-test("overlay page renders the crew strip", async ({ page }) => {
-  await page.setViewportSize({ width: 1200, height: 160 });
+test("overlay opens one small window per working soul", async ({ page }) => {
   await page.goto("/overlay.html");
+  const root = page.locator(".overlay-root");
+  await expect(root).toHaveAttribute("data-roamers", /\S/, { timeout: 10_000 });
+  await expect(root).toHaveAttribute("data-crew", "0");
+  const agent = ((await root.getAttribute("data-roamers")) ?? "").split(" ")[0]!;
+
+  await page.setViewportSize({ width: 160, height: 90 });
+  await page.goto(`/overlay.html?agent=${encodeURIComponent(agent)}`);
   await expect(page.locator(".overlay-root canvas")).toBeVisible();
-  // Only working agents appear on the desktop, over a transparent background.
-  await expect(page.locator(".overlay-root")).not.toHaveAttribute("data-crew", "0", { timeout: 10_000 });
-  await expect(page.locator(".overlay-root")).toHaveAttribute("data-crew", /\d+/);
+  await expect(page.locator(".overlay-root")).toHaveAttribute("data-crew", "1", { timeout: 10_000 });
   expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe("rgba(0, 0, 0, 0)");
+  const bubble = page.locator(".bubble");
+  await expect(bubble).toHaveCount(1, { timeout: 10_000 });
+  const box = await bubble.evaluate((e) => e.getBoundingClientRect());
+  expect(box.width).toBeLessThanOrEqual(150);
+  expect(box.left).toBeGreaterThanOrEqual(0);
+  expect(box.right).toBeLessThanOrEqual(160);
 });
 
-test("grimoire edits, saves and links the global and project instructions", async ({ page }) => {
+test("grimoire edits, saves and links the global, category and project instructions", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: /Grimório/ }).first().click();
   await expect(page.getByRole("heading", { name: "Grimório" })).toBeVisible();
@@ -100,11 +110,21 @@ test("grimoire edits, saves and links the global and project instructions", asyn
   await page.getByRole("button", { name: "Vincular", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("vinculado em ~/.claude/CLAUDE.md");
 
-  await page.locator(".grimoire-item", { hasText: "loja-online" }).click();
+  await expect(page.getByRole("group", { name: "Pessoal" }).locator(".grimoire-item", { hasText: "ilha-das-sombras" })).toBeVisible();
+  await page.locator(".grimoire-item", { hasText: "Trabalho" }).click();
+  await expect(page.getByLabel("Instruções de Trabalho")).toHaveValue(/Projetos de trabalho/);
+  await expect(page.getByRole("button", { name: "Vincular", exact: true })).toHaveCount(0);
+
+  await page.getByRole("group", { name: "Sem categoria" }).locator(".grimoire-item", { hasText: "loja-online" }).click();
+  await expect(page.getByLabel("Instruções de loja-online")).toHaveCount(0);
+  await page.getByRole("button", { name: "Trabalho", exact: true }).click();
   const project = page.getByLabel("Instruções de loja-online");
   await expect(project).toHaveValue("");
   await project.fill("# Loja\n");
   await page.getByRole("button", { name: "Salvar" }).click();
+  await expect(project).toHaveValue("@~/(demo)/instructions/trabalho/trabalho.md\n# Loja\n");
+  await expect(page.getByRole("group", { name: "Trabalho" }).locator(".grimoire-item", { hasText: "loja-online" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Sem categoria" })).toHaveCount(0);
   await page.locator(".grimoire-item", { hasText: "Global" }).click();
   await expect(page.getByLabel("Instruções de Global")).toHaveValue(/Nunca escrever comentários/);
 });

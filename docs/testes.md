@@ -3,6 +3,146 @@
 Cada rodada de testes concluída é registrada aqui, a mais recente primeiro: o que estava sendo testado, cada comando, o
 resultado e os números. Falhas são copiadas literalmente.
 
+## 2026-11-18 · Overlay: nova rodada do e2e após corrigir o teste de CSP
+
+O que mudou desde a rodada anterior (logo abaixo): só `apps/desktop/e2e/csp.spec.ts`. O teste
+`production bundle runs under the app CSP` agora pega um id do atributo `data-roamers` da página principal do overlay,
+abre `overlay.html?agent=<id>` e espera `data-crew="1"`; continua verificando o fundo transparente e a ausência de erros
+sob a CSP. Nenhum outro código mudou.
+
+Rodado por: agente `tester`. Comandos pnpm com Node v22.23.3. O Playwright reaproveitou o Vite do app aberto em modo
+dev (porta 1420).
+
+| Comando | Resultado | Números |
+| --- | --- | --- |
+| `pnpm typecheck` | passou | 5 pacotes sem erros (inclui `apps/desktop`, onde está o teste alterado) |
+| `pnpm test:e2e` (Playwright, backend de demonstração) | passou | 10 de 10 passaram em 23.9s, incluindo `production bundle runs under the app CSP` (8.1s) e `overlay opens one small window per working soul` (6.1s) |
+
+Falhas: nenhuma.
+
+Avisos do Vite, que não são erros: "`__dirname` (vite.config.ts:10:51). Use `import.meta.dirname` instead".
+
+Não rodado nesta rodada: `pnpm test` (Vitest) e `pnpm test:rust`, porque nenhum código além do e2e mudou; os
+resultados da rodada anterior valem (79 testes Vitest, 88 testes Rust). Continua sem cobertura automática o mesmo da
+rodada anterior: as janelas reais `roamer-*` no app desktop (abertura e fechamento, movimento pela tela, hitboxes por
+janela, `move_overlay`/`overlay_area` por janela, `claim_road_fight` entre janelas, outros monitores).
+
+## 2026-11-18 · Overlay: modo roam com uma janela pequena por personagem (rodada final antes do commit)
+
+O que mudou: no modo roam, cada personagem ganha a sua própria janela pequena. No Rust, um registro de janelas
+`roamer-*` (`apps/desktop/src-tauri/src/roam.rs`, novo), os comandos `sync_roamers` e `claim_road_fight`,
+`move_overlay` e `overlay_area` por janela, hitboxes por janela e o `roam_spawn` em
+`apps/desktop/src-tauri/src/platform/geometry.rs`. No front, a janela de cada agente é aberta como
+`overlay.html?agent=<id>` e se move pela tela desviando das outras (`Roamer` em `apps/desktop/src/overlay/roam.ts`); o
+modo solo fica em `apps/desktop/src/overlay/scene.ts`. O e2e do overlay foi trocado para
+`overlay opens one small window per working soul`. O working tree também traz as mudanças do Grimório (instruções por
+categoria) e das instruções em `instructions/`, já testadas hoje, que entraram nesta rodada sem alteração.
+
+Rodado por: agente `tester`. Comandos pnpm com Node v22.23.3.
+
+| Comando | Resultado | Números |
+| --- | --- | --- |
+| `pnpm typecheck` | passou | 5 pacotes sem erros |
+| `pnpm test` (Vitest) | passou | 79 testes em 14 arquivos; dos quais 32 em `apps/desktop/src/overlay` (labels 6, road 9, roam 12, sendo 4 em `roamer windows`, crew 5) |
+| `pnpm test:rust` (`cargo test --workspace`) | passou | 88 testes (ids-core 48 + 11 de cenários, ids-hook 3, desktop 26), 6 deles em `roam::tests` e 10 em `platform::geometry::tests`, incluindo `newcomers_are_born_a_window_away_from_everyone` e `the_first_roamer_is_born_in_the_middle_of_the_bottom_lane` |
+| `pnpm test:e2e` (Playwright, backend de demonstração) | falhou | 9 de 10 passaram; falhou `production bundle runs under the app CSP`. `overlay opens one small window per working soul` passou |
+
+Falha (reproduzida ao rodar `e2e/csp.spec.ts` sozinho), `apps/desktop/e2e/csp.spec.ts:8`,
+`production bundle runs under the app CSP`:
+
+```
+Error: expect(locator).not.toHaveAttribute(expected) failed
+
+Locator:  locator('.overlay-root')
+Expected: not "0"
+Received: "0"
+Timeout:  10000ms
+
+Call log:
+  - Expect "not toHaveAttribute" locator('.overlay-root') with timeout 10000ms
+  - waiting for locator('.overlay-root')
+    9 × locator resolved to <div data-crew="0" data-roamers="" class="overlay-root">…</div>
+      - unexpected value "0"
+    15 × locator resolved to <div data-crew="0" class="overlay-root" data-roamers="sess-0001#main">…</div>
+       - unexpected value "0"
+
+  20 |   await page.goto(`${BASE}/overlay.html`);
+  21 |   // Only working agents appear on the desktop, over a transparent background.
+> 22 |   await expect(page.locator(".overlay-root")).not.toHaveAttribute("data-crew", "0", { timeout: 10_000 });
+```
+
+Causa provável (sem correção nesta rodada): o teste de CSP ainda abre `overlay.html` sem `?agent=` e espera
+`data-crew` diferente de 0. Com a mudança, essa página no modo roam só abre as janelas dos personagens (`data-roamers`) e
+fica com `data-crew="0"`, exatamente o que o novo e2e do overlay espera. O bundle de produção sob a CSP carregou o
+castelo; a parte do overlay do teste não chegou às verificações de fundo transparente e de erros de console.
+
+Avisos do Vite, que não são erros: "ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1)" e "`__dirname`
+(vite.config.ts:10:51). Use `import.meta.dirname` instead".
+
+Não coberto por teste automático: o app desktop não foi aberto pelo teste, então as janelas reais `roamer-*` (abertura e
+fechamento, movimento pela tela desviando umas das outras, hitboxes por janela, `move_overlay`/`overlay_area` por janela,
+`claim_road_fight` entre janelas, outros monitores) não foram vistas funcionando; só a lógica pura em `roam.rs`,
+`geometry.rs` e `roam.ts` foi testada. O desenho em canvas de `scene.ts` no modo solo só foi coberto indiretamente (o e2e
+confere o canvas, `data-crew="1"` e o balão de até 150 px numa janela de 160x90). O overlay do bundle de produção sob a
+CSP ficou sem verificação por causa da falha acima.
+
+## 2026-11-18 · Overlay: modo roam na largura da área de trabalho, uma luta por personagem e balões sem sobreposição
+
+O que mudou: no modo roam, a faixa do overlay ocupa a largura da área de trabalho e mantém a altura de antes. Cada
+personagem anda para o seu lado, com uma separação mínima. Cada personagem tem a sua luta de estrada contra o próprio
+mob, com barra de vida, de 4 a 8 golpes e ataques em intervalos sorteados, com pelo menos 1,5 s entre o início de lutas
+diferentes. Os balões e os nomes não se sobrepõem: têm largura limitada com reticências e se revezam. Arquivos alterados:
+`apps/desktop/src/overlay/roam.ts`, `apps/desktop/src/overlay/road.ts`, `apps/desktop/src/overlay/labels.ts` (novo),
+`apps/desktop/src/overlay/scene.ts`, `apps/desktop/src/overlay/OverlayApp.tsx`, `apps/desktop/src/overlay/road.test.ts`,
+`apps/desktop/src/overlay/roam.test.ts`, `apps/desktop/src/overlay/labels.test.ts` (novo),
+`apps/desktop/e2e/app.spec.ts`, `apps/desktop/src-tauri/src/platform/geometry.rs`,
+`apps/desktop/src-tauri/src/platform/mod.rs`, `apps/desktop/src-tauri/src/windows.rs` e
+`apps/desktop/src/settings/SettingsPage.tsx`. O working tree também traz as mudanças do Grimório testadas na rodada
+anterior de hoje, que entraram nesta rodada sem alteração.
+
+Rodado por: agente `tester`. Comandos pnpm com Node v22.23.3.
+
+| Comando | Resultado | Números |
+| --- | --- | --- |
+| `pnpm typecheck` | passou | 5 pacotes sem erros |
+| `pnpm test` (Vitest) | passou | 75 testes em 14 arquivos; dos quais 28 em `apps/desktop/src/overlay` (labels 6, roam 8, road 9, crew 5) |
+| `pnpm test:rust` (`cargo test --workspace`) | passou | 80 testes (ids-core 48 + 11 de cenários, ids-hook 3, desktop 18), 8 deles em `platform::geometry::tests`, incluindo `roams_on_a_low_strip_as_wide_as_the_work_area` e `roams_at_the_dropped_height_but_never_over_the_taskbar` |
+| `pnpm test:e2e` (Playwright, backend de demonstração) | passou | 10 testes, incluindo `overlay page renders the crew strip` (balões com no máximo 150 px e sem sobreposição) |
+
+Falhas: nenhuma. Avisos do Vite, que não são erros: "ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1)" e
+"`__dirname` (vite.config.ts:10:51). Use `import.meta.dirname` instead".
+
+Não coberto por teste automático: o app desktop não foi aberto, então a janela real do overlay (largura da área de
+trabalho, altura, posição acima da barra de tarefas, outros monitores), as mudanças em `windows.rs` e `platform/mod.rs`
+fora do cálculo de geometria e a tela de configurações (`SettingsPage.tsx`) com o backend real não foram vistas
+funcionando. O desenho em canvas de `scene.ts` (barra de vida, mob piscando em vermelho, animação das lutas) só foi
+coberto indiretamente: o e2e confere que o canvas aparece e que os balões não se sobrepõem, não o que é desenhado.
+
+## 2026-11-18 · Grimório: instruções por categoria (pessoal e trabalho)
+
+O que mudou: a página Grimório foi adaptada à nova estrutura de instruções por categoria (`instructions/pessoal/` e
+`instructions/trabalho/`). Arquivos alterados: `crates/ids-core/src/instructions.rs`,
+`apps/desktop/src-tauri/src/commands/instructions.rs`, `packages/shared/src/types.ts`, `apps/desktop/src/bridge/demo.ts`,
+`apps/desktop/src/grimoire/GrimoirePage.tsx`, `apps/desktop/src/styles/theme.css` e `apps/desktop/e2e/app.spec.ts`.
+
+Rodado por: agente `tester`. Comandos pnpm com Node v22.23.3.
+
+| Comando | Resultado | Números |
+| --- | --- | --- |
+| `pnpm typecheck` | passou | 5 pacotes sem erros |
+| `pnpm test` (Vitest) | passou | 62 testes em 13 arquivos |
+| `pnpm test:rust` (`cargo test --workspace`) | passou | 80 testes (ids-core 48 + 11 de cenários, ids-hook 3, desktop 18), 20 deles em `instructions::tests` |
+| `pnpm test:e2e` (Playwright, backend de demonstração) | passou | 10 testes, incluindo `grimoire edits, saves and links the global, category and project instructions` |
+
+Falhas: nenhuma. Observação de ambiente: o Node padrão do shell é o v18.20.8, e com ele o `pnpm test` nem inicia
+("SyntaxError: The requested module 'node:util' does not provide an export named 'styleText'", vindo do rolldown). A
+rodada foi feita com o Node v22.23.3 do nvm. Avisos do Vite, que não são erros: "ESM syntax in a file loaded as CommonJS
+(vitest.config.ts:1:1)" e "`__dirname` (vite.config.ts:10:51). Use `import.meta.dirname` instead".
+
+Não coberto por teste automático: o app desktop não foi aberto, então o Grimório com o backend real (leitura de
+`instructions/pessoal/` e `instructions/trabalho/` e o botão Vincular gravando nos arquivos reais) e o visual do
+`theme.css` não foram vistos funcionando.
+
 ## 2026-11-17 · Grimório: cabeçalho do editor em duas colunas
 
 O que mudou: no cabeçalho do editor, o título e os caminhos ficam à esquerda, cortados com reticências (o caminho

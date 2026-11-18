@@ -5,7 +5,7 @@
  * fixtures (see crates/ids-core/examples/export_demo.rs), so the UI can be
  * exercised in a plain browser without a Claude Code session.
  */
-import type { Dashboard, InstructionEntry, IntegrationInfo, SessionDetail, Snapshot, Specialty, SystemInfo, Update, AgentDetail } from "@ids/shared";
+import type { Dashboard, InstructionCategory, InstructionEntry, IntegrationInfo, SessionDetail, Snapshot, Specialty, SystemInfo, Update, AgentDetail } from "@ids/shared";
 import type { Backend } from "./backend";
 import data from "./demo-data.json";
 
@@ -24,6 +24,8 @@ function shift<T>(value: T, offset: number): T {
 }
 
 const STEP_MS = 1600;
+
+let lastRoadFight = -Infinity;
 
 export function createDemoBackend(): Backend {
   const doc = data as unknown as {
@@ -94,19 +96,38 @@ export function createDemoBackend(): Backend {
     events: ["SessionStart", "SessionEnd", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure", "SubagentStart", "SubagentStop", "Stop", "StopFailure", "Notification", "TaskCreated", "TaskCompleted"],
   };
 
-  const instructionFiles = new Map<string, string>([["global", "# Regras globais\n\nSempre responder em português.\n"]]);
+  const categoryImport = (c: InstructionCategory) => `@~/(demo)/instructions/${c}/${c}.md`;
+  const instructionFiles = new Map<string, string>([
+    ["global", "# Regras globais\n\nSempre responder em português.\n"],
+    ["pessoal/pessoal", "# Projetos pessoais\n\nCommits direto na main.\n"],
+    ["trabalho/trabalho", "# Projetos de trabalho\n\nBranches feature/* a partir da develop.\n"],
+    ["pessoal/projects/ilha-das-sombras", `${categoryImport("pessoal")}\n\n# Ilha das Sombras\n`],
+  ]);
   const linkedInstructions = new Set<string>();
-  const instructionEntry = (key: string, name: string, projectPath: string | null): InstructionEntry => ({
+  const instructionEntry = (key: string, name: string, projectPath: string | null, category: InstructionCategory | null, slug: string | null): InstructionEntry => ({
     key,
     name,
-    file: `(demo)/instructions/${key}.md`,
+    slug,
+    category,
+    file: category || key === "global" ? `(demo)/instructions/${key}.md` : "",
     exists: instructionFiles.has(key),
     bytes: new TextEncoder().encode(instructionFiles.get(key) ?? "").length,
     projectPath,
-    target: key === "global" ? "~/.claude/CLAUDE.md" : projectPath && `${projectPath}/CLAUDE.local.md`,
+    target: key === "global" ? "~/.claude/CLAUDE.md" : slug ? projectPath && `${projectPath}/CLAUDE.local.md` : null,
     linked: linkedInstructions.has(key),
   });
   const demoProjects = [{ name: "ilha-das-sombras", path: "/demo/ilha-das-sombras" }, { name: "loja-online", path: "/demo/loja-online" }];
+  const demoCategories: InstructionCategory[] = ["pessoal", "trabalho"];
+  const projectKey = (key: string) => /^(pessoal|trabalho)\/projects\/(.+)$/.exec(key) as [string, InstructionCategory, string] | null;
+  const withCategoryImport = (category: InstructionCategory, content: string) => {
+    const own = categoryImport(category);
+    const lines = content.split("\n").filter((l) => !demoCategories.some((c) => c !== category && l.trim() === categoryImport(c)));
+    return lines.some((l) => l.trim() === own) ? lines.join("\n") : `${own}\n${lines.join("\n")}`;
+  };
+  const demoProjectEntry = (p: { name: string; path: string }) => {
+    const category = demoCategories.find((c) => instructionFiles.has(`${c}/projects/${p.name}`)) ?? null;
+    return instructionEntry(category ? `${category}/projects/${p.name}` : `projects/${p.name}`, p.name, p.path, category, p.name);
+  };
 
   const removedAgents = new Set<string>();
   const specialties = new Map<string, Specialty>();
@@ -161,18 +182,24 @@ export function createDemoBackend(): Backend {
     integrationApply: () => reject("Instalar a integração"),
     instructionsOverview: async () => ({
       root: "(demo)/instructions",
-      global: instructionEntry("global", "Global", null),
-      projects: demoProjects.map((p) => instructionEntry(`projects/${p.name}`, p.name, p.path)),
+      global: instructionEntry("global", "Global", null, null, null),
+      categories: demoCategories.map((c) => instructionEntry(`${c}/${c}`, c === "pessoal" ? "Pessoal" : "Trabalho", null, c, null)),
+      projects: demoProjects.map(demoProjectEntry),
     }),
     readInstructions: async (key) => instructionFiles.get(key) ?? "",
     saveInstructions: async (key, content) => {
-      instructionFiles.set(key, content);
+      const project = projectKey(key);
+      instructionFiles.set(key, project ? withCategoryImport(project[1], content) : content);
     },
     linkInstructions: async (key) => {
+      const project = projectKey(key);
+      if (key !== "global" && !project) throw new Error("As regras de categoria não são vinculadas: elas entram pelos arquivos dos projetos.");
       const changed = !linkedInstructions.has(key);
       linkedInstructions.add(key);
-      if (!instructionFiles.has(key)) instructionFiles.set(key, "");
-      return { target: instructionEntry(key, key, null).target ?? key, changed, adopted: false, keptLocal: false, backup: null };
+      if (project) instructionFiles.set(key, withCategoryImport(project[1], instructionFiles.get(key) ?? ""));
+      else if (!instructionFiles.has(key)) instructionFiles.set(key, "");
+      const path = project ? demoProjects.find((p) => p.name === project[2])?.path : null;
+      return { target: path ? `${path}/CLAUDE.local.md` : "~/.claude/CLAUDE.md", changed, adopted: false, keptLocal: false, backup: null };
     },
     showCastle: async () => {},
     setOverlayVisible: async () => {},
@@ -182,7 +209,14 @@ export function createDemoBackend(): Backend {
       const screen = { x: 0, y: 0, width: window.innerWidth, height: window.innerHeight };
       return { name: null, window: screen, monitor: screen, work: screen };
     },
-    moveOverlay: async () => {},
+    moveOverlay: async () => [],
+    syncRoamers: async () => {},
+    claimRoadFight: async (staggerMs) => {
+      const now = Date.now();
+      if (now - lastRoadFight < staggerMs) return false;
+      lastRoadFight = now;
+      return true;
+    },
     setOverlayHitboxes: async () => {},
     quit: async () => {},
     onUpdates: async (cb) => {

@@ -61,9 +61,11 @@ export interface Backend {
   showCastle(route?: string): Promise<void>;
   setOverlayVisible(visible: boolean): Promise<void>;
   listMonitors(): Promise<MonitorInfo[]>;
-  setOverlayContentWidth(width: number, height?: number): Promise<void>;
+  setOverlayContentWidth(width: number): Promise<void>;
   overlayArea(): Promise<OverlayArea>;
-  moveOverlay(x: number, y: number): Promise<void>;
+  moveOverlay(x: number, y: number): Promise<Rect[]>;
+  syncRoamers(agents: string[], width: number, height: number): Promise<void>;
+  claimRoadFight(staggerMs: number): Promise<boolean>;
   setOverlayHitboxes(boxes: Rect[]): Promise<void>;
   quit(): Promise<void>;
 
@@ -93,6 +95,7 @@ export interface OverlayArea {
   window: Rect;
   monitor: Rect;
   work: Rect;
+  peers?: Rect[];
 }
 
 export interface MonitorInfo {

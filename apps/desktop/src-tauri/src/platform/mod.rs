@@ -22,7 +22,7 @@ use std::path::PathBuf;
 
 use serde::Serialize;
 
-pub use geometry::{monitor_at, overlay_rect_fit, roam_rect, Anchor, OverlayAlign, OverlayPlacement, Rect};
+pub use geometry::{overlay_rect_fit, roam_spawn, OverlayAlign, OverlayPlacement, Rect};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
