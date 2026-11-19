@@ -65,7 +65,8 @@ export class CharacterView extends Container {
     const sheetKey = `${ch.cls.sprite}|${ch.palette.cloak}|${ch.palette.trim}|${ch.palette.glow}`;
     const key = `${sheetKey}|${anim}`;
     this.visible = !ch.hidden;
-    this.scale.set(ch.scale * opts.scale * this.facing, ch.scale * opts.scale);
+    const size = ch.scale * opts.scale * (spec.displayScale ?? 1);
+    this.scale.set(size * this.facing, size);
     if (key === this.currentKey) return;
     const canvas = await characterSheet(ch.cls.sprite, ch.palette);
     const frames = framesFor(sheetKey, sourceFor(sheetKey, canvas), spec, anim);

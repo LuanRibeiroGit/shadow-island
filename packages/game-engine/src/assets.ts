@@ -19,6 +19,7 @@ export interface SheetSpec {
   frameHeight: number;
   /** Pixel offset of the feet inside the frame (anchor). */
   anchorY: number;
+  displayScale?: number;
   animations: Partial<Record<AnimationName | string, AnimationSpec>>;
 }
 

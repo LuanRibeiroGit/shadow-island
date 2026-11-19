@@ -3,6 +3,41 @@
 Cada rodada de testes concluída é registrada aqui, a mais recente primeiro: o que estava sendo testado, cada comando, o
 resultado e os números. Falhas são copiadas literalmente.
 
+## 2026-11-19 · Skin do Robson e Guardiã da Lanterna com a skin do Escriba
+
+O que mudou (working tree, não commitado): nova skin `robson`, montada por `scripts/generate-assets.py`
+(`build_loose_characters`) a partir de `scripts/art/characters/robson.png` em `assets/characters/robson.png`, com quadros
+de 48px e `"displayScale": 0.75` em `assets/manifest.json`. `SheetSpec` (`packages/game-engine/src/assets.ts`) ganhou
+`displayScale` opcional, que `apps/desktop/src/characters/pixi.ts` multiplica na escala do `CharacterView`. Em
+`packages/game-engine/src/classes.ts`, nova classe `robson`; `lantern_keeper` (Guardiã da Lanterna) passa a usar o
+sprite e as cores do `ink_scribe`; `BATHROOM_REGULAR` saiu de `crew.ts` para `classes.ts`, com `ownClass(id)`, que dá a
+classe `robson` ao tripulante `crew:documentation`. `apps/desktop/src/characters/CharactersPage.tsx` usa `ownClass` no
+card. Teste novo em `packages/game-engine/src/crew.test.ts`: `robson wears his own skin and the lantern keeper wears the
+scribe's`.
+
+Rodado por: agente `tester`. Comandos pnpm com Node v22.23.3.
+
+| Comando | Resultado | Números |
+| --- | --- | --- |
+| `pnpm typecheck` | passou | 5 pacotes sem erros (shared, analytics, event-system, game-engine, desktop) |
+| `pnpm test` (Vitest) | passou | 80 testes em 14 arquivos, incluindo `crew > robson wears his own skin and the lantern keeper wears the scribe's` e `characters > validates manifests` |
+| `pnpm test:e2e` (Playwright, backend de demonstração) | passou | 10 de 10 passaram em 27.5s, incluindo `castle shows the demo banner and the main agent from replayed events` e `production bundle runs under the app CSP`, que conferem o texto "Guardiã da Lanterna" |
+
+Falhas: nenhuma.
+
+Manifesto: o teste `validates manifests` usa um manifesto sintético, não o `assets/manifest.json` real. Conferido à
+parte, com as mesmas regras de `validateManifest`, que a entrada `robson` tem as 9 animações obrigatórias (`ANIMATIONS`)
+mais `sleep`, todas com `frames` e `fps` maiores que zero, e que `assets/characters/robson.png` tem 288x480, ou seja,
+6 colunas por 10 linhas de 48px, compatível com o maior número de quadros (6) e de linhas (10).
+
+Avisos, que não são erros: Vitest, "ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1)"; Vite no e2e,
+"`__dirname` (vite.config.ts:10:51). Use `import.meta.dirname` instead".
+
+Não rodado: `pnpm test:rust`, porque nenhum código Rust mudou. Sem cobertura automática: a aparência real no app
+desktop (o sprite do Robson, o `displayScale` de 0.75 aplicado no `CharacterView`, a Guardiã da Lanterna desenhada com
+a skin do Escriba e o card do Robson na página de personagens); nenhum teste confere pixels nem a escala renderizada.
+`scripts/generate-assets.py` também não foi executado nem testado.
+
 ## 2026-11-18 · Motor: Stop com tarefa em segundo plano e subagentes silenciosos
 
 O que mudou: correção em `crates/ids-core/src/engine.rs` para personagens que ficavam presos no overlay do desktop.

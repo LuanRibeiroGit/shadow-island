@@ -73,4 +73,14 @@ describe("crew", () => {
     const shown = embodyCrew([after], [], new Map(), 0).agents[0]!;
     expect(resolveCharacter(shown, custom).cls.id).toBe("mist_alchemist");
   });
+
+  it("robson wears his own skin and the lantern keeper wears the scribe's", () => {
+    const robson = embodyCrew(crewRoster({}), [], new Map(), 0).agents.find((a) => a.id === "crew:documentation")!;
+    expect(robson.name).toBe("Robson");
+    expect(resolveCharacter(robson, {}).cls.sprite).toBe("robson");
+    const keeper = resolveCharacter(agent("main", { isMain: true }), {});
+    expect(keeper.cls.label).toBe("Guardiã da Lanterna");
+    expect(keeper.cls.sprite).toBe("ink_scribe");
+    expect(resolveCharacter(agent("doc", { specialty: "documentation" }), {}).cls.sprite).toBe("ink_scribe");
+  });
 });

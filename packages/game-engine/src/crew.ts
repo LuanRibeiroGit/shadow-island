@@ -1,5 +1,5 @@
 import { SPECIALTIES, type Agent, type Specialty } from "@ids/shared";
-import { CLASSES, SPECIALTY_LABEL, type CharacterCustomization } from "./classes";
+import { BATHROOM_REGULAR, CLASSES, SPECIALTY_LABEL, type CharacterCustomization } from "./classes";
 
 /**
  * The castle's standing crew. Crew members live in the castle whether or not
@@ -43,12 +43,6 @@ export const isCrewId = (id: string) => id.startsWith("crew:");
 export const KING_KEY = "npc:king";
 export const KING_DEFAULT_NAME = "O Rei";
 export const kingName = (custom: Record<string, CharacterCustomization>) => custom[KING_KEY]?.name?.trim() || KING_DEFAULT_NAME;
-
-/**
- * The crew member with the troubled belly: off duty, it keeps running to the castle's
- * bathroom. The documentation member, whose function real agents take least often.
- */
-export const BATHROOM_REGULAR = "crew:documentation";
 
 /** Default members that have a name of their own instead of their class's. */
 const OWN_NAME: Record<string, string> = { [BATHROOM_REGULAR]: "Robson" };

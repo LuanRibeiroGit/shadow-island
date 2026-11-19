@@ -361,6 +361,73 @@ def build_custom_characters(manifest):
         manifest["characters"][cls_id] = {"image": f"characters/{cls_id}.png", "frameWidth": size, "frameHeight": size, "anchorY": 31, "animations": animations}
 
 
+LOOSE_CHARACTERS = {
+    "robson": {
+        "cell": 48,
+        "displayScale": 0.55,
+        "animations": {
+            "idle": (0, 0, 4, 4, True),
+            "move": (1, 0, 6, 10, True),
+            "work": (2, 0, 4, 6, True),
+            "read": (2, 0, 4, 4, True),
+            "cast": (2, 0, 4, 6, True),
+            "attack": (2, 0, 4, 9, True),
+            "wait": (0, 0, 4, 3, True),
+            "cheer": (0, 0, 4, 8, True),
+            "hurt": (0, 0, 3, 6, False),
+            "sleep": (3, 0, 4, 2, True),
+        },
+    },
+}
+
+
+def spans(flags):
+    out = []
+    start = None
+    for i, on in enumerate(flags + [False]):
+        if on and start is None:
+            start = i
+        elif not on and start is not None:
+            out.append((start, i))
+            start = None
+    return out
+
+
+def loose_sprites(src):
+    alpha = src.getchannel("A")
+    width, height = src.size
+    opaque = alpha.load()
+    bands = spans([any(opaque[x, y] for x in range(width)) for y in range(height)])
+    rows = []
+    for top, bottom in bands:
+        columns = spans([any(opaque[x, y] for y in range(top, bottom)) for x in range(width)])
+        rows.append([src.crop((left, top, right, bottom)) for left, right in columns])
+    return rows
+
+
+def build_loose_characters(manifest):
+    src_dir = Path(__file__).parent / "art" / "characters"
+    for cls_id, spec in LOOSE_CHARACTERS.items():
+        src_path = src_dir / f"{cls_id}.png"
+        if not src_path.exists():
+            continue
+        rows = loose_sprites(Image.open(src_path).convert("RGBA"))
+        cell = spec["cell"]
+        layout = spec["animations"]
+        columns = max(frames for _, _, frames, _, _ in layout.values())
+        sheet = Image.new("RGBA", (cell * columns, cell * len(layout)), (0, 0, 0, 0))
+        animations = {}
+        for row, (name, (srow, first, frames, fps, loop)) in enumerate(layout.items()):
+            for f in range(frames):
+                sprite = rows[srow][first + f]
+                x = f * cell + (cell - sprite.width) // 2
+                y = row * cell + cell - 1 - sprite.height
+                sheet.paste(sprite, (x, y))
+            animations[name] = {"row": row, "frames": frames, "fps": fps, "loop": loop}
+        sheet.save(ASSETS / "characters" / f"{cls_id}.png")
+        manifest["characters"][cls_id] = {"image": f"characters/{cls_id}.png", "frameWidth": cell, "frameHeight": cell, "anchorY": cell - 1, "displayScale": spec["displayScale"], "animations": animations}
+
+
 # --------------------------------------------------------------- monsters
 
 MONSTERS = {
@@ -1100,6 +1167,7 @@ def main():
     manifest = {"version": 1, "characters": {}, "monsters": {}, "effects": {}, "environments": {}, "ui": {"appIcon": "ui/app-icon-32.png"}}
     build_characters(manifest)
     build_custom_characters(manifest)
+    build_loose_characters(manifest)
     build_monsters(manifest)
     build_effects(manifest)
     build_environment(manifest)
