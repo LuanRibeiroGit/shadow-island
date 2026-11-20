@@ -3,10 +3,11 @@
 import "pixi.js/unsafe-eval";
 import { Application, Container, Graphics, Rectangle, Sprite, Text, Texture, type FederatedPointerEvent, type TextureSource } from "pixi.js";
 import { ROOM_LABEL, STATE_LABEL } from "../components/labels";
-import { KING_CURSES, KING_LINES, OUCH_LINES, WC_LINES, WC_RELIEF_LINES, WC_RUSH_LINES, pick, pickChat, pickLine } from "./chatter";
+import { FORGE_GO_LINES, FORGE_LINES, KING_CURSES, KING_LINES, OUCH_LINES, WC_LINES, WC_RELIEF_LINES, WC_RUSH_LINES, pick, pickChat, pickLine } from "./chatter";
 import { workSpeech } from "./speech";
 import type { Agent, Encounter, Room } from "@ids/shared";
 import {
+  ANVIL_SPOTS,
   AREAS,
   BATHROOM_REGULAR,
   BEDS,
@@ -140,6 +141,10 @@ interface Actor {
   foeNextHit: number;
   /** The shade is red (taking a blow) until this time. */
   foeHitUntil: number;
+  /** The hammer of a soul punished at the forge (made the first time it is needed). */
+  hammer: Graphics | null;
+  /** Which blow of the hammer was last counted, to spark once per blow. */
+  hammerBlow: number;
   /** A shade died with the task still going: the next one rises at this time. */
   foeRespawnAt: number;
   /** The fighter is swinging its finishing blow until this time. */
@@ -205,6 +210,21 @@ const RESPAWN_MS = 900;
 
 /** Heading to (or sitting in) the bathroom. */
 const toWc = (a: { destKey: string }) => a.destKey.endsWith(":wc");
+/** Sent by the King to hammer at the forge (on the way there, or already at the anvil). */
+const punished = (a: { destKey: string }) => a.destKey.endsWith(":forge");
+/** One hammer blow on the anvil takes this long. */
+const HAMMER_MS = 640;
+
+/** A smith's hammer, drawn pointing up from the hand that holds it (the origin). */
+function makeHammer(): Graphics {
+  const g = new Graphics();
+  g.rect(-1, -11, 2, 11).fill({ color: 0x6a4a30 });
+  g.rect(-4, -15, 8, 5).fill({ color: 0x8d9aa0 });
+  g.rect(-4, -15, 8, 1).fill({ color: 0xc3ced2 });
+  g.rect(-4, -11, 8, 1).fill({ color: 0x4a5458 });
+  g.visible = false;
+  return g;
+}
 
 /**
  * The castle seen from above. Each real agent has a bed in the barracks: idle
@@ -385,7 +405,8 @@ export class CastleScene {
   private kingTick(dt: number, now: number) {
     const k = this.king;
     if (!k) return;
-    const awake = () => [...this.actors.values()].filter((a) => a.phase !== "sleeping" && a.leavingSince === null && !resolveCharacter(a.agent, this.custom).hidden);
+    // Souls already serving their punishment at the forge are left alone.
+    const awake = () => [...this.actors.values()].filter((a) => a.phase !== "sleeping" && a.leavingSince === null && !punished(a) && !resolveCharacter(a.agent, this.custom).hidden);
     const walkTo = (to: Point, mode: King["mode"]) => {
       const from = k.mode === "sitting" ? KING_STEP : tileOf(k.pos);
       const path = findPath(this.map, from, to);
@@ -438,6 +459,8 @@ export class CastleScene {
       if (now > k.until) {
         k.mode = "pausing";
         k.until = now + rnd(1200, 3000);
+        // The whipping over, the soul is sent to hammer at the forge.
+        if (victim) this.sendToForge(victim, now);
       }
     } else if (k.mode === "pausing") {
       if (now > k.until) nextLeg();
@@ -516,6 +539,50 @@ export class CastleScene {
         k.bubble.scale.set(1 / this.zoom);
         k.bubble.position.set(sp.x, sp.y - seat - 30 * KING_SCALE - 20 / this.zoom);
       }
+    }
+  }
+
+  /**
+   * The King's punishment: an off-duty soul he just whipped goes to the forge and
+   * hammers at an anvil for a while. A soul doing a real agent's work keeps working.
+   */
+  private sendToForge(actor: Actor, now: number) {
+    if (!actor.idle || actor.leavingSince !== null || actor.phase === "sleeping") return;
+    const busy = new Set([...this.actors.values()].filter((o) => o !== actor && punished(o)).map((o) => `${o.dest.x},${o.dest.y}`));
+    const spot = ANVIL_SPOTS.find((p) => !busy.has(`${p.x},${p.y}`)) ?? ANVIL_SPOTS[Math.floor(Math.random() * ANVIL_SPOTS.length)]!;
+    // Whatever it was doing (a chat included) is over.
+    actor.talking = false;
+    actor.stay = rnd(16000, 28000);
+    actor.strollLeft = Math.max(actor.strollLeft, 1);
+    actor.nextSay = now + rnd(1200, 2500);
+    this.goTo(actor, spot, `stroll:${spot.x},${spot.y}:forge`);
+  }
+
+  /** The hammer of a punished soul: swinging at the anvil while it stands there, hidden otherwise. */
+  private hammerLife(actor: Actor, now: number) {
+    const at = punished(actor) && actor.phase === "working" && actor.idle && actor.leavingSince === null && !resolveCharacter(actor.agent, this.custom).hidden;
+    if (!at) {
+      if (actor.hammer) actor.hammer.visible = false;
+      return;
+    }
+    if (!actor.hammer) {
+      actor.hammer = makeHammer();
+      this.fxLayer.addChild(actor.hammer);
+    }
+    const sp = toIso(actor.pos);
+    // Raised slowly, brought down fast on the anvil (up and to the right of the soul).
+    const t = (now % HAMMER_MS) / HAMMER_MS;
+    const down = 0.85;
+    const up = -0.7;
+    const angle = t < 0.7 ? down + (up - down) * Math.sin((t / 0.7) * (Math.PI / 2)) : up + (down - up) * ((t - 0.7) / 0.3) ** 2;
+    actor.hammer.visible = true;
+    actor.hammer.position.set(sp.x + 7, sp.y - 13);
+    actor.hammer.rotation = angle;
+    const blow = Math.floor(now / HAMMER_MS);
+    if (blow !== actor.hammerBlow) {
+      actor.hammerBlow = blow;
+      // Sparks fly from the ingot on every other blow.
+      if (blow % 2 === 0) void spawnEffect(this.fxLayer, "sparkle", sp.x + 16, sp.y - 24, 0.6);
     }
   }
 
@@ -918,6 +985,8 @@ export class CastleScene {
       foeBarHp: -1,
       foeNextHit: 0,
       foeHitUntil: 0,
+      hammer: null,
+      hammerBlow: 0,
       foeRespawnAt: 0,
       finisherUntil: 0,
       ring: this.makeRing(),
@@ -961,6 +1030,8 @@ export class CastleScene {
   private animFor(actor: Actor, now: number): string {
     if (now < actor.hurtUntil) return "hurt";
     if (now < actor.finisherUntil) return "attack";
+    // At the anvil, serving the King's punishment: hard at work.
+    if (actor.idle && actor.phase === "working" && punished(actor)) return "work";
     if (actor.phase === "walking") return "move";
     if (actor.phase === "sleeping") return "idle";
     if (this.fighting(actor, now)) return "attack";
@@ -1062,6 +1133,7 @@ export class CastleScene {
       }
       if (actor.talking) this.say(actor, undefined, now);
       else this.idleLife(actor, now);
+      this.hammerLife(actor, now);
       if (actor.phase === "sleeping") actor.zz.alpha = 0.55 + 0.45 * Math.sin(now / 500);
       this.place(actor);
       if (actor.leavingSince !== null && actor.phase === "sleeping" && now - actor.leavingSince > LEAVE_AFTER_MS) this.remove(actor);
@@ -1140,8 +1212,10 @@ export class CastleScene {
       if (actor.nextSay === 0) actor.nextSay = now + rnd(6000, 30000);
       if (now > actor.nextSay) {
         const wc = toWc(actor);
-        this.say(actor, wc ? pick(actor.phase === "walking" ? WC_RUSH_LINES : WC_LINES) : pickLine(), now);
-        actor.nextSay = now + (wc ? rnd(3500, 7000) : rnd(18000, 50000));
+        const forge = punished(actor);
+        const walking = actor.phase === "walking";
+        this.say(actor, wc ? pick(walking ? WC_RUSH_LINES : WC_LINES) : forge ? pick(walking ? FORGE_GO_LINES : FORGE_LINES) : pickLine(), now);
+        actor.nextSay = now + (wc || forge ? rnd(3500, 7000) : rnd(18000, 50000));
       }
     }
     this.say(actor, undefined, now);
@@ -1380,6 +1454,7 @@ export class CastleScene {
     if (a.idle || a.leavingSince !== null) {
       if (a.phase === "sleeping") return "Dormindo no alojamento";
       if (toWc(a)) return a.phase === "walking" ? "Correndo para o banheiro" : "No banheiro";
+      if (punished(a)) return a.phase === "walking" ? "Indo cumprir castigo no ferreiro" : "De castigo, martelando na bigorna";
       if (a.phase === "walking") return a.destKey === "bed" || a.destKey === "floor-nap" ? "Indo dormir" : "Passeando pelo castelo";
       const t = tileOf(a.pos);
       const r = roomOf(this.map, t);
@@ -1410,6 +1485,7 @@ export class CastleScene {
     actor.bubble?.destroy({ children: true });
     actor.foe?.destroy();
     actor.foeBar?.destroy();
+    actor.hammer?.destroy();
     actor.ring.destroy();
     const sp = toIso(actor.pos);
     void spawnEffect(this.fxLayer, "mist", sp.x, sp.y - 10, 1);

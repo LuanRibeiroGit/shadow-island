@@ -103,6 +103,21 @@ export const WC_LINES = [
 /** ...and on his way out. */
 export const WC_RELIEF_LINES = ["Ufa, que alívio.", "Não entrem lá agora.", "Dez minutos, no mínimo.", "Agora vai.", "Acho que passou.", "Abram a janela..."];
 
+/** A soul the King just whipped, sent to the forge: on its way there... */
+export const FORGE_GO_LINES = ["Tô indo, tô indo!", "Já vou pra bigorna...", "Que injustiça!", "Lá vou eu de novo.", "Calma, majestade!"];
+
+/** ...and hammering at the anvil. */
+export const FORGE_LINES = [
+  "Tlim! Tlim! Tlim!",
+  "Já tô batendo, majestade!",
+  "Ai, minhas costas...",
+  "Quem mandou eu cochilar...",
+  "Mais uma espada pro Rei.",
+  "Isso aqui pesa, viu?",
+  "Tlim! ...ai, meu dedo!",
+  "Nunca mais passeio perto dele.",
+];
+
 export const pick = (list: readonly string[], rand: () => number = Math.random): string => list[Math.floor(rand() * list.length)]!;
 
 /** Small talk when two off-duty souls meet. Lines alternate: first soul, second soul, ... */

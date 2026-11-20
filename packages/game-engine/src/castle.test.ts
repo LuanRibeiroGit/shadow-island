@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ROOMS } from "@ids/shared";
-import { AREAS, BEDS, BedRegistry, DOORS, PROPS, STATIONS, TOILET_SPOTS, bedsideOf, inBathroom, buildMap, destinationFor, feetOf, findPath, fromIso, isWalkable, isoOfTile, roomOf, stepAlong, tileOf, toIso } from "./castle";
+import { ANVIL_SPOTS, AREAS, BEDS, BedRegistry, DOORS, PROPS, STATIONS, TOILET_SPOTS, bedsideOf, inBathroom, buildMap, destinationFor, feetOf, findPath, fromIso, isWalkable, isoOfTile, roomOf, stepAlong, tileOf, toIso } from "./castle";
 
 const map = buildMap();
 
@@ -34,6 +34,15 @@ describe("castle map", () => {
     for (const t of TOILET_SPOTS) {
       expect(isWalkable(map, t)).toBe(true);
       expect(inBathroom(t.x, t.y)).toBe(true);
+      expect(findPath(map, bedsideOf(map, BEDS[0]!), t)).not.toBeNull();
+    }
+  });
+
+  it("has anvils a punished soul can walk to and stand at", () => {
+    for (const t of ANVIL_SPOTS) {
+      expect(isWalkable(map, t)).toBe(true);
+      expect(roomOf(map, t)).toBe("forge");
+      expect(PROPS.some((p) => p.tile === "anvil" && p.x === t.x && p.y === t.y - 1)).toBe(true);
       expect(findPath(map, bedsideOf(map, BEDS[0]!), t)).not.toBeNull();
     }
   });

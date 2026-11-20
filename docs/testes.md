@@ -3,6 +3,38 @@
 Cada rodada de testes concluída é registrada aqui, a mais recente primeiro: o que estava sendo testado, cada comando, o
 resultado e os números. Falhas são copiadas literalmente.
 
+## 2026-11-20 · Forja redecorada e castigo do Rei na bigorna
+
+O que mudou (working tree, não commitado): forja do castelo redecorada, com os tiles novos `trough`, `grindstone`,
+`coal` e `workbench` e a bigorna redesenhada em `scripts/iso_castle.py` (`assets/environments/castle-iso.png` e
+`assets/manifest.json` regenerados); em `packages/game-engine/src/castle.ts`, os props novos da forja e `ANVIL_SPOTS`,
+com o teste novo `has anvils a punished soul can walk to and stand at` em `castle.test.ts`. Em
+`apps/desktop/src/castle/scene.ts` e `chatter.ts`, o castigo do Rei: depois de chicotear um tripulante de folga, o Rei o
+manda à forja, onde ele martela na bigorna por 16 a 28 s (martelo animado, faíscas, falas próprias). Essas mudanças
+foram reaplicadas por cima de um pull de 14 commits (`159c4fc..69b47f8`); `scene.ts` e `manifest.json` tiveram junção
+automática, sem conflito.
+
+Rodado por: agente `tester`.
+
+| Comando | Resultado | Números |
+| --- | --- | --- |
+| `pnpm typecheck` | passou | 5 pacotes sem erros |
+| `pnpm test` (Vitest) | passou | 81 testes em 14 arquivos, incluindo `castle map > has anvils a punished soul can walk to and stand at` |
+| `pnpm test:e2e` (Playwright, backend de demonstração) | passou | 10 de 10 em 40.4s, incluindo `production bundle runs under the app CSP` com o manifesto regenerado |
+
+Falhas: nenhuma.
+
+Avisos, que não são erros: Vite, `configLoader: 'native'` (ESM em `vitest.config.ts`, `__dirname` em
+`apps/desktop/vite.config.ts`).
+
+Não rodado: `pnpm test:rust`, porque nenhum código Rust mudou.
+
+Conferido à mão no navegador (modo demonstração), fora da suíte: forçando o Rei a chicotear o Arquiteto das Marés de
+folga, ele foi mandado à bigorna (36,11), andou até lá dizendo "Tô indo, tô indo!", ficou com a animação `work` e o
+martelo subindo e descendo, e falou "Tlim! ...ai, meu dedo!", "Isso aqui pesa, viu?" e "Nunca mais passeio perto dele.".
+
+Sem cobertura automática: o castigo na tela (martelo, faíscas, falas, duração) e a aparência dos tiles novos da forja.
+
 ## 2026-11-19 · Skin do Robson e Guardiã da Lanterna com a skin do Escriba
 
 O que mudou (working tree, não commitado): nova skin `robson`, montada por `scripts/generate-assets.py`

@@ -1163,7 +1163,11 @@
         "grave": 96,
         "broken_pillar": 97,
         "toilet": 98,
-        "sink": 99
+        "sink": 99,
+        "trough": 100,
+        "grindstone": 101,
+        "coal": 102,
+        "workbench": 103
       }
     },
     "king": {

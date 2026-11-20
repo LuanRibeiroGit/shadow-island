@@ -127,6 +127,10 @@ function table(x0: number, x1: number, y: number, top = "table_m"): Prop[] {
   ];
 }
 
+/** The forge's anvils, and the tile in front of each where a soul stands to hammer. */
+const ANVILS: Point[] = [{ x: 36, y: 10 }, { x: 40, y: 10 }];
+export const ANVIL_SPOTS: Point[] = ANVILS.map((a) => ({ x: a.x, y: a.y + 1 }));
+
 export const PROPS: Prop[] = [
   // King's Hall: a throne of swords on a stepped dais at the head of the royal carpet,
   // ghost-fire braziers at its corners, guardian statues, candelabra and pillars.
@@ -147,11 +151,17 @@ export const PROPS: Prop[] = [
   ...table(4, 8, 15, "table_candle"),
   { tile: "orb", x: 11, y: 12 },
   ...col("bookshelf_side", 3, [11, 12, 13]),
-  // Forge.
+  // Forge: two hearths with coal heaps beside them, anvils on their stumps with the
+  // quenching trough between, benches and a grindstone along the walls.
   ...row("forge", [35, 39], 7),
-  ...row("anvil", [36, 40], 10),
-  { tile: "rack", x: 42, y: 7 },
+  ...row("coal", [37, 41], 7),
+  ...row("anvil", ANVILS.map((a) => a.x), ANVILS[0]!.y),
+  { tile: "trough", x: 38, y: 10 },
+  ...row("rack", [34, 42], 7),
+  ...row("workbench", [34, 42], 9),
+  { tile: "grindstone", x: 34, y: 11 },
   ...row("barrel", [34, 42], 14),
+  { tile: "chest", x: 42, y: 13 },
   { tile: "brazier", x: 42, y: 11 },
   // The Arena (the one place where work happens): ghost-fire at the corners,
   // weapon racks on the back wall, a rune ring on the floor.

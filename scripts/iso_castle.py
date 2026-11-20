@@ -563,10 +563,66 @@ def prop(name):
         c.ellipse(x - 3, y - 6, 2.4, 1.6 + f * 0.6, rgb("#ffd28a"))
         c.ellipse(x - 3, y - 8, 12, 10, (255, 140, 60, 35))
     elif name == "anvil":
+        # On an oak stump, with a glowing ingot waiting for the hammer.
+        c.shadow(0.4)
+        c.box(0.52, 0.52, 6, rgb("#5a3d27"))
+        c.box(0.3, 0.3, 5, rgb("#2b3135"), z=6)
+        c.box(0.78, 0.36, 5, rgb("#5a656a"), z=11)
+        c.box(0.22, 0.2, 3, rgb("#5a656a"), z=12, ox=0.46)
+        x, y = P(-0.08, 0, 16)
+        c.ellipse(x, y - 1, 7, 4, (255, 150, 60, 45))
+        c.rect(x - 3, y - 1, 6, 2, rgb("#ff9a3a"))
+        c.rect(x - 2, y - 1, 3, 1, rgb("#ffe0a0"))
+    elif name == "trough":
+        # Quenching trough: spectral water, a wisp of steam.
+        c.shadow(0.45)
+        c.box(0.9, 0.5, 8, WOOD)
+        c.box(0.78, 0.38, 0.5, rgb("#2a8a6a"), z=8, outline=False)
+        x, y = P(0, 0, 8.5)
+        c.ellipse(x, y, 7, 2.2, rgb("#4fdcae"))
+        c.px(x - 3, y, rgb("#d6fff0"))
+        c.px(x + 4, y - 1, rgb("#d6fff0"))
+        for k in range(7):
+            c.px(x + 2 + (k % 3) - 1, y - 4 - k * 2, (214, 255, 240, 150 - k * 18))
+        for gx in (-0.3, 0.3):
+            bx, by = P(gx, 0.25, 4)
+            c.rect(bx, by - 4, 1, 8, rgb("#2b3135"))
+    elif name == "grindstone":
         c.shadow(0.35)
-        c.box(0.3, 0.3, 8, rgb("#2b3135"))
-        c.box(0.7, 0.32, 5, rgb("#5a656a"), z=8)
-        c.box(0.2, 0.2, 3, rgb("#5a656a"), z=9, ox=0.4)
+        c.box(0.55, 0.3, 7, WOOD)
+        x, y = P(0, 0, 13)
+        c.ellipse(x, y, 8, 8, rgb("#8a9a96"))
+        c.ellipse(x - 1, y - 1, 6, 6, rgb("#a3b2ae"))
+        c.ellipse(x, y, 5, 5, rgb("#6e7d7a"))
+        c.ellipse(x, y, 1.6, 1.6, GOLD)
+        for dx, dy in ((7, -3), (9, -5), (10, -2), (8, 0)):
+            c.px(x + dx, y + dy, rgb("#ffd28a"))
+    elif name == "coal":
+        # A heap of coal with live embers in it.
+        x, y = P(0, 0)
+        c.ellipse(x, y, 13, 6, (0, 0, 0, 70))
+        for _ in range(30):
+            dx, dy = rnd.uniform(-10, 10), rnd.uniform(-4, 4)
+            h = (1 - abs(dx) / 11) * 9
+            c.ellipse(x + dx, y + dy - h, 2.4, 1.8, rgb(rnd.choice(["#15191b", "#1d2225", "#262c2f"])))
+        for _ in range(7):
+            dx = rnd.uniform(-7, 7)
+            c.px(x + dx, y - rnd.uniform(2, 8), rgb(rnd.choice(["#e8742a", "#ffb347"])))
+        c.ellipse(x, y - 5, 10, 7, (255, 120, 50, 28))
+    elif name == "workbench":
+        # Smith's bench: a hammer, tongs and a stack of ingots.
+        c.shadow(0.5)
+        c.box(1, 0.6, 11, rgb("#6a4a30"))
+        c.box(0.26, 0.2, 2, rgb("#8d9aa0"), z=11, ox=0.28, oy=0.05)
+        c.box(0.26, 0.2, 2, rgb("#8d9aa0"), z=13, ox=0.3, oy=0.02)
+        c.box(0.2, 0.16, 2, rgb("#c9a24a"), z=11, ox=0.02, oy=-0.12)
+        x, y = P(-0.28, 0.05, 11.5)
+        c.rect(x - 4, y, 9, 1, rgb("#4a3424"))
+        c.rect(x + 4, y - 2, 3, 4, rgb("#5a656a"))
+        x, y = P(-0.05, 0.18, 11.5)
+        for k in range(6):
+            c.px(x + k, y - k // 2, rgb("#2b3135"))
+            c.px(x + k, y + 1 - k // 3, rgb("#2b3135"))
     elif name.startswith("cauldron"):
         f = name.endswith("1")
         c.shadow(0.4)
@@ -901,7 +957,7 @@ PROPS = [
     "barrel", "telescope", "map_table", "forge0", "forge1", "anvil", "cauldron0", "cauldron1", "rack", "bed",
     "sleeper", "zz", "bookshelf_side", "throne_big", "brazier0", "brazier1", "banner_stand", "orb", "potion_tank",
     "knight_statue", "candelabra0", "candelabra1", "fountain0", "fountain1", "lantern0", "lantern1", "tree_dead", "grave", "broken_pillar",
-    "toilet", "sink",
+    "toilet", "sink", "trough", "grindstone", "coal", "workbench",
 ]
 
 
